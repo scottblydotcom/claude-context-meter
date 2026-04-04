@@ -9,9 +9,17 @@ import SwiftUI
 
 @main
 struct ClaudeContextMeterApp: App {
+    @StateObject private var viewModel = MetricsViewModel()
+
     var body: some Scene {
-        MenuBarExtra("CCM", systemImage: "chart.bar.fill") {
+        MenuBarExtra {
             ContentView()
+                .environmentObject(viewModel)
+        } label: {
+            StatusBarView(
+                contextFill: viewModel.context?.fillPercent ?? 0,
+                billingFill: viewModel.billing?.fillPercent ?? 0
+            )
         }
         .menuBarExtraStyle(.window)
     }
