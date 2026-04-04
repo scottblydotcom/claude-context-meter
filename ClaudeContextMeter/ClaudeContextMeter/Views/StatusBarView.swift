@@ -16,18 +16,20 @@ struct StatusBarView: View {
 
     private func dotEmoji(for percent: Int) -> String {
         switch percent {
-        case 85...: return "🔴"
-        case 60...: return "🟡"
-        default:    return "🟢"
+        case 70...: return "🔴"  // compaction imminent (~80% trigger is 10% away)
+        case 50...: return "🟠"  // voluntary compact zone, cost climbing fast
+        case 33...: return "🟡"  // awareness zone, rising cost
+        default:    return "🟢"  // lean and efficient
         }
     }
 }
 
 #Preview {
     HStack(spacing: 16) {
-        StatusBarView(contextFill: 17, billingFill: 33)   // both green
-        StatusBarView(contextFill: 70, billingFill: 33)   // yellow + green
-        StatusBarView(contextFill: 90, billingFill: 88)   // both red
+        StatusBarView(contextFill: 20, billingFill: 20)   // 🟢🟢 lean
+        StatusBarView(contextFill: 40, billingFill: 40)   // 🟡🟡 awareness
+        StatusBarView(contextFill: 60, billingFill: 60)   // 🟠🟠 compact now
+        StatusBarView(contextFill: 75, billingFill: 75)   // 🔴🔴 compaction imminent
     }
     .padding()
 }
