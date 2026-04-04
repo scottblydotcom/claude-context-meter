@@ -22,14 +22,25 @@ struct ContextWindowMetrics {
     }
 }
 
-/// The calculated billing window metrics across all sessions in the last 5 hours.
+/// The calculated billing window metrics for the current 5-hour window.
 struct BillingWindowMetrics {
     let outputTokens: Int
     let tokenLimit: Int
+    let windowStart: Date
+    let nextReset: Date
 
     /// Percentage of billing token limit used (0–100).
     var fillPercent: Int {
         guard tokenLimit > 0 else { return 0 }
         return Int((Double(outputTokens) / Double(tokenLimit)) * 100)
+    }
+
+    /// Human-readable time until next window reset, e.g. "4h 18m".
+    var timeUntilReset: String {
+        let seconds = max(0, nextReset.timeIntervalSinceNow)
+        let h = Int(seconds) / 3600
+        let m = (Int(seconds) % 3600) / 60
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
     }
 }

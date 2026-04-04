@@ -19,7 +19,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
-        .frame(minWidth: 320, minHeight: 200)
+        .frame(minWidth: 360, minHeight: 260)
         .onAppear { loadData() }
     }
 
@@ -46,6 +46,7 @@ struct ContentView: View {
             "── Billing Window (5 hr) ───────",
             "Output tokens: \(billing.outputTokens) / \(billing.tokenLimit)",
             "Fill:  \(billing.fillPercent)%",
+            "Resets in: \(billing.timeUntilReset)",
         ]
 
         statusText = lines.joined(separator: "\n")
