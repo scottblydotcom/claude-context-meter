@@ -25,6 +25,21 @@ enum JSONLParser {
         return records
     }
 
+    /// Returns all JSONL files across all Claude projects, including subagents.
+    static func allSessionFiles() -> [URL] {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let projectsDir = home.appendingPathComponent(".claude/projects")
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: projectsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        return (enumerator.allObjects as? [URL] ?? [])
+            .filter { $0.pathExtension == "jsonl" }
+    }
+
     /// Returns the most recently modified non-subagent JSONL file across all Claude projects.
     static func mostRecentSessionFile() -> URL? {
         let home = FileManager.default.homeDirectoryForCurrentUser

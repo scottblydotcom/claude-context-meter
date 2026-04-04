@@ -21,3 +21,15 @@ struct ContextWindowMetrics {
         return Int((Double(totalTokens) / Double(contextLimit)) * 100)
     }
 }
+
+/// The calculated billing window metrics across all sessions in the last 5 hours.
+struct BillingWindowMetrics {
+    let outputTokens: Int
+    let tokenLimit: Int
+
+    /// Percentage of billing token limit used (0–100).
+    var fillPercent: Int {
+        guard tokenLimit > 0 else { return 0 }
+        return Int((Double(outputTokens) / Double(tokenLimit)) * 100)
+    }
+}

@@ -24,18 +24,31 @@ struct ContentView: View {
     }
 
     private func loadData() {
-        guard let metrics = ContextWindowCalculator.calculate() else {
-            statusText = "No session data found."
-            return
+        let context = ContextWindowCalculator.calculate()
+        let billing = BillingWindowCalculator.calculate()
+
+        var lines: [String] = []
+
+        if let c = context {
+            lines += [
+                "── Context Window ──────────────",
+                "File:  \(c.fileName)",
+                "Model: \(c.model)",
+                "Fill:  \(c.fillPercent)%  (\(c.totalTokens) / \(c.contextLimit))",
+                "       in \(c.inputTokens)  cache \(c.cacheReadTokens)  out \(c.outputTokens)",
+            ]
+        } else {
+            lines.append("Context window: no data")
         }
 
-        statusText = """
-        File: \(metrics.fileName)
-        Model: \(metrics.model)
-        Tokens used: \(metrics.totalTokens) / \(metrics.contextLimit)
-        Context fill: \(metrics.fillPercent)%
-        (input: \(metrics.inputTokens), cache: \(metrics.cacheReadTokens), output: \(metrics.outputTokens))
-        """
+        lines.append("")
+        lines += [
+            "── Billing Window (5 hr) ───────",
+            "Output tokens: \(billing.outputTokens) / \(billing.tokenLimit)",
+            "Fill:  \(billing.fillPercent)%",
+        ]
+
+        statusText = lines.joined(separator: "\n")
     }
 }
 
