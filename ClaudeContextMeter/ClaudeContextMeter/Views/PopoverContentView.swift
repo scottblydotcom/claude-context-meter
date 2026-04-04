@@ -48,7 +48,6 @@ struct PopoverContentView: View {
             }
         }
         .frame(width: 320)
-        .onAppear { viewModel.refresh() }
     }
 }
 
