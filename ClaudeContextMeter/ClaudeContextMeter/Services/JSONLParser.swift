@@ -1,0 +1,54 @@
+//
+//  JSONLParser.swift
+//  ClaudeContextMeter
+//
+//  Created by Scott Bly on 4/3/26.
+//
+
+import Foundation
+
+enum JSONLParser {
+
+    /// Parses a JSONL file and returns all decodable SessionRecords.
+    static func parse(fileURL: URL) throws -> [SessionRecord] {
+        let contents = try String(contentsOf: fileURL, encoding: .utf8)
+        let decoder = JSONDecoder()
+        var records: [SessionRecord] = []
+
+        for line in contents.split(separator: "\n", omittingEmptySubsequences: true) {
+            guard let data = line.data(using: .utf8) else { continue }
+            if let record = try? decoder.decode(SessionRecord.self, from: data) {
+                records.append(record)
+            }
+        }
+
+        return records
+    }
+
+    /// Returns the most recently modified non-subagent JSONL file across all Claude projects.
+    static func mostRecentSessionFile() -> URL? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let projectsDir = home.appendingPathComponent(".claude/projects")
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: projectsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        var best: (url: URL, date: Date)? = nil
+
+        for case let url as URL in enumerator {
+            // Skip subagent files (path contains "/subagents/")
+            guard url.pathExtension == "jsonl",
+                  !url.path.contains("/subagents/") else { continue }
+
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            if best == nil || date > best!.date {
+                best = (url, date)
+            }
+        }
+
+        return best?.url
+    }
+}

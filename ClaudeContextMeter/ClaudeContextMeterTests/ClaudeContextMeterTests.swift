@@ -10,29 +10,128 @@ import XCTest
 
 final class ClaudeContextMeterTests: XCTestCase {
 
-    override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-    }
+    // MARK: - SessionRecord decoding
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
-    func testExample() throws {
-        // This is an example of a functional test case.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
-        // Any test you write for XCTest can be annotated as throws and async.
-        // Mark your test throws to produce an unexpected failure when your test encounters an uncaught error.
-        // Mark your test async to allow awaiting for asynchronous code to complete. Check the results with assertions afterwards.
-        // XCTest Documentation
-        // https://developer.apple.com/documentation/xctest
-    }
-
-    func testPerformanceExample() throws {
-        // This is an example of a performance test case.
-        self.measure {
-            // Put the code you want to measure the time of here.
+    func testDecodesCompleteAssistantRecord() throws {
+        let json = """
+        {
+            "type": "assistant",
+            "requestId": "req_abc123",
+            "sessionId": "sess_xyz",
+            "timestamp": "2026-04-03T20:00:00.000Z",
+            "message": {
+                "model": "claude-sonnet-4-6",
+                "stop_reason": "end_turn",
+                "usage": {
+                    "input_tokens": 1000,
+                    "cache_creation_input_tokens": 500,
+                    "cache_read_input_tokens": 2000,
+                    "output_tokens": 300
+                }
+            }
         }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let record = try JSONDecoder().decode(SessionRecord.self, from: data)
+
+        XCTAssertEqual(record.type, "assistant")
+        XCTAssertEqual(record.message?.stopReason, "end_turn")
+        XCTAssertEqual(record.message?.usage?.outputTokens, 300)
+        XCTAssertEqual(record.message?.usage?.totalTokens, 3800)
+        XCTAssertTrue(record.isCompleteAssistantRecord)
     }
 
+    func testStreamingRecordIsNotComplete() throws {
+        let json = """
+        {
+            "type": "assistant",
+            "requestId": "req_abc123",
+            "sessionId": "sess_xyz",
+            "timestamp": "2026-04-03T20:00:00.000Z",
+            "message": {
+                "model": "claude-sonnet-4-6",
+                "stop_reason": null,
+                "usage": {
+                    "input_tokens": 1000,
+                    "cache_creation_input_tokens": 0,
+                    "cache_read_input_tokens": 0,
+                    "output_tokens": 6
+                }
+            }
+        }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let record = try JSONDecoder().decode(SessionRecord.self, from: data)
+
+        XCTAssertFalse(record.isCompleteAssistantRecord)
+    }
+
+    func testUserRecordIsNotComplete() throws {
+        let json = """
+        {
+            "type": "user",
+            "requestId": null,
+            "sessionId": "sess_xyz",
+            "timestamp": "2026-04-03T20:00:00.000Z",
+            "message": null
+        }
+        """
+        let data = try XCTUnwrap(json.data(using: .utf8))
+        let record = try JSONDecoder().decode(SessionRecord.self, from: data)
+
+        XCTAssertFalse(record.isCompleteAssistantRecord)
+    }
+
+    // MARK: - ModelLimits
+
+    func testKnownClaudeModelsReturn200k() {
+        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-sonnet-4-6"), 200_000)
+        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-opus-4-6"), 200_000)
+        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-haiku-4-5"), 200_000)
+    }
+
+    func testUnknownModelReturnsDefault() {
+        XCTAssertEqual(ModelLimits.contextWindow(for: "gpt-4"), 200_000)
+    }
+
+    // MARK: - JSONLParser
+
+    func testParsesValidJSONLFile() throws {
+        let lines = [
+            """
+            {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"2026-04-03T20:00:00.000Z","message":{"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+            """,
+            """
+            {"type":"user","requestId":null,"sessionId":"s1","timestamp":"2026-04-03T20:01:00.000Z","message":null}
+            """,
+            "this line is malformed JSON and should be silently skipped"
+        ]
+
+        let content = lines.joined(separator: "\n")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("test.jsonl")
+        try content.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let records = try JSONLParser.parse(fileURL: url)
+
+        XCTAssertEqual(records.count, 2)
+        XCTAssertEqual(records[0].type, "assistant")
+        XCTAssertEqual(records[1].type, "user")
+    }
+
+    func testDeduplicatesByRequestId() throws {
+        // Same requestId appearing 3 times (streaming partials) — only one should be used
+        let sameRequest = """
+        {"type":"assistant","requestId":"req_dup","sessionId":"s1","timestamp":"2026-04-03T20:00:00.000Z","message":{"model":"claude-sonnet-4-6","stop_reason":"end_turn","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":50}}}
+        """
+        let content = [sameRequest, sameRequest, sameRequest].joined(separator: "\n")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("test_dup.jsonl")
+        try content.write(to: url, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let records = try JSONLParser.parse(fileURL: url)
+        let unique = Dictionary(grouping: records, by: \.requestId).values.compactMap(\.first)
+
+        XCTAssertEqual(unique.count, 1)
+    }
 }
