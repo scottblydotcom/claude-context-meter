@@ -16,7 +16,7 @@ enum JSONLParser {
         var records: [SessionRecord] = []
 
         for line in contents.split(separator: "\n", omittingEmptySubsequences: true) {
-            guard let data = line.data(using: .utf8) else { continue }
+            guard let data = String(line).data(using: .utf8) else { continue }
             if let record = try? decoder.decode(SessionRecord.self, from: data) {
                 records.append(record)
             }

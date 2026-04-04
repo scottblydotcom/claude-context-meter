@@ -19,45 +19,22 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
         .padding()
-        .frame(minWidth: 320)
+        .frame(minWidth: 320, minHeight: 200)
         .onAppear { loadData() }
     }
 
     private func loadData() {
-        guard let url = JSONLParser.mostRecentSessionFile() else {
-            statusText = "No session files found."
+        guard let metrics = ContextWindowCalculator.calculate() else {
+            statusText = "No session data found."
             return
         }
-
-        guard let records = try? JSONLParser.parse(fileURL: url) else {
-            statusText = "Failed to parse session file."
-            return
-        }
-
-        // Deduplicate by requestId, keep only complete assistant records
-        var seen = Set<String>()
-        let complete = records.filter { record in
-            guard record.isCompleteAssistantRecord,
-                  let rid = record.requestId else { return false }
-            return seen.insert(rid).inserted
-        }
-
-        guard let last = complete.last,
-              let usage = last.message?.usage,
-              let model = last.message?.model else {
-            statusText = "No complete assistant records found.\nFile: \(url.lastPathComponent)"
-            return
-        }
-
-        let limit = ModelLimits.contextWindow(for: model)
-        let pct = Int(Double(usage.totalTokens) / Double(limit) * 100)
 
         statusText = """
-        File: \(url.lastPathComponent)
-        Model: \(model)
-        Tokens used: \(usage.totalTokens) / \(limit)
-        Context fill: \(pct)%
-        (input: \(usage.inputTokens), cache: \(usage.cacheReadInputTokens), output: \(usage.outputTokens))
+        File: \(metrics.fileName)
+        Model: \(metrics.model)
+        Tokens used: \(metrics.totalTokens) / \(metrics.contextLimit)
+        Context fill: \(metrics.fillPercent)%
+        (input: \(metrics.inputTokens), cache: \(metrics.cacheReadTokens), output: \(metrics.outputTokens))
         """
     }
 }

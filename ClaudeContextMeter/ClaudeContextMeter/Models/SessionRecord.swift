@@ -29,8 +29,8 @@ struct SessionRecord: Codable {
 
     struct UsageTokens: Codable {
         let inputTokens: Int
-        let cacheCreationInputTokens: Int
-        let cacheReadInputTokens: Int
+        let cacheCreationInputTokens: Int?
+        let cacheReadInputTokens: Int?
         let outputTokens: Int
 
         enum CodingKeys: String, CodingKey {
@@ -42,7 +42,7 @@ struct SessionRecord: Codable {
 
         /// Total tokens consumed in this turn (input + cache + output).
         var totalTokens: Int {
-            inputTokens + cacheCreationInputTokens + cacheReadInputTokens + outputTokens
+            inputTokens + (cacheCreationInputTokens ?? 0) + (cacheReadInputTokens ?? 0) + outputTokens
         }
     }
 
