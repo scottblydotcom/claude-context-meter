@@ -11,8 +11,8 @@ class MetricsViewModel: ObservableObject {
     @Published var context: ContextWindowMetrics?
     @Published var billing: BillingWindowMetrics?
 
-    private var fileWatcher: FileWatcher?
-    private var heartbeat: Timer?
+    nonisolated(unsafe) private var fileWatcher: FileWatcher?
+    nonisolated(unsafe) private var heartbeat: Timer?
 
     init() {
         refresh()
@@ -40,8 +40,4 @@ class MetricsViewModel: ObservableObject {
         }
     }
 
-    deinit {
-        heartbeat?.invalidate()
-        fileWatcher?.stop()
-    }
 }
