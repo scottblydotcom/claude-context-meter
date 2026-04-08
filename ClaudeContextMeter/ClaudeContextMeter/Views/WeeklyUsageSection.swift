@@ -28,7 +28,7 @@ struct WeeklyUsageSection: View {
         }
     }
 
-    private func row(label: String, value: Int) -> some View {
+    private func row(label: String, value: Int64) -> some View {
         HStack {
             Text(label)
                 .foregroundStyle(.secondary)

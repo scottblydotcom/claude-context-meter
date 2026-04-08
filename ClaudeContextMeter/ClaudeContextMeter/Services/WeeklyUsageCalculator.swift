@@ -78,7 +78,7 @@ enum WeeklyUsageCalculator {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         // Deduplicate by requestId; keep only complete records within the window.
-        struct Tally { var input, cacheCreate, cacheRead, output: Int; var isPeak: Bool }
+        struct Tally { var input, cacheCreate, cacheRead, output: Int64; var isPeak: Bool }
         var byRequest: [String: Tally] = [:]
 
         for url in JSONLParser.allSessionFiles() {
@@ -101,12 +101,12 @@ enum WeeklyUsageCalculator {
             }
         }
 
-        var totalInput = 0, totalCC = 0, totalCR = 0, totalOutput = 0
-        var peakInput  = 0, peakCC  = 0, peakCR  = 0, peakOutput  = 0
+        var totalInput: Int64 = 0, totalCC: Int64 = 0, totalCR: Int64 = 0, totalOutput: Int64 = 0
+        var peakInput: Int64  = 0, peakCC: Int64  = 0, peakCR: Int64  = 0, peakOutput: Int64  = 0
         for tally in byRequest.values {
             totalInput += tally.input; totalCC += tally.cacheCreate
             totalCR += tally.cacheRead; totalOutput += tally.output
-            let multiplier = tally.isPeak ? 2 : 1
+            let multiplier: Int64 = tally.isPeak ? 2 : 1
             peakInput += tally.input * multiplier; peakCC += tally.cacheCreate * multiplier
             peakCR += tally.cacheRead * multiplier; peakOutput += tally.output * multiplier
         }
