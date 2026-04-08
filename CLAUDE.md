@@ -35,7 +35,7 @@ The section has two sub-groups:
 - **Runtime Exceptions** — relaxations for JIT, unsigned memory, library validation (leave all off for this app)
 - **Resource Access** — TCC entitlements for camera, mic, location, etc. (leave all off for this app)
 
-This app reads files from `~/.claude/` via standard POSIX calls. No Hardened Runtime entitlements are needed for file system access — those restrictions belong to App Sandbox, not Hardened Runtime. Enable the capability as-is with no boxes checked.
+This app reads files from `~/.claude/` via Foundation APIs (String, FileManager) and FSEvents. No Hardened Runtime entitlements are needed for file system access — those restrictions belong to App Sandbox, not Hardened Runtime. Enable the capability as-is with no boxes checked.
 
 **Note:** Xcode 26 also introduces a separate "Enhanced Security" capability (new in 2026, opt-in, adds pointer authentication and memory integrity enforcement). It is not the same as Hardened Runtime and is not required for this app.
 
@@ -44,5 +44,5 @@ This app reads files from `~/.claude/` via standard POSIX calls. No Hardened Run
 - No App Sandbox (required to read `~/.claude/projects/` — sandboxed apps cannot access arbitrary home directory paths)
 - No network calls, no API keys, no remote data
 - Reads JSONL files via FSEvents + 30s heartbeat timer fallback
-- Deduplicates by `requestId`; only records with `output_tokens > 0` are counted
+- Deduplicates by `requestId`; sums output_tokens from all complete assistant records
 - Bundle ID: `com.scottbly.ClaudeContextMeter`
