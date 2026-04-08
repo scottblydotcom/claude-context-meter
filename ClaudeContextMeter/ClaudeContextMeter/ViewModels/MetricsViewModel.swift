@@ -10,6 +10,7 @@ import Combine
 class MetricsViewModel: ObservableObject {
     @Published var context: ContextWindowMetrics?
     @Published var billing: BillingWindowMetrics?
+    @Published var weekly: WeeklyUsageMetrics?
 
     nonisolated(unsafe) private var fileWatcher: FileWatcher?
     nonisolated(unsafe) private var heartbeat: Timer?
@@ -22,6 +23,7 @@ class MetricsViewModel: ObservableObject {
     func refresh() {
         context = ContextWindowCalculator.calculate()
         billing = BillingWindowCalculator.calculate()
+        weekly  = WeeklyUsageCalculator.calculate()
     }
 
     private func startWatching() {

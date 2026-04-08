@@ -22,6 +22,36 @@ struct ContextWindowMetrics {
     }
 }
 
+/// The calculated weekly usage metrics across all three token-counting methods.
+struct WeeklyUsageMetrics {
+    /// input + cache_create + cache_read + output
+    let allTokens: Int
+    /// input + cache_create + output (excludes cache reads)
+    let noCacheRead: Int
+    /// input + output only
+    let inputOutputOnly: Int
+    let windowStart: Date
+    let nextReset: Date
+
+    /// Human-readable time until next weekly reset, e.g. "3d 2h" or "4h 13m".
+    var timeUntilReset: String {
+        let secs = max(0, nextReset.timeIntervalSinceNow)
+        let d = Int(secs) / 86400
+        let h = (Int(secs) % 86400) / 3600
+        let m = (Int(secs) % 3600) / 60
+        if d > 0 { return "\(d)d \(h)h" }
+        if h > 0 { return "\(h)h \(m)m" }
+        return "\(m)m"
+    }
+
+    /// Formatted next reset label matching Claude's UI, e.g. "Tue 9:00 PM".
+    var nextResetDisplay: String {
+        let f = DateFormatter()
+        f.dateFormat = "EEE h:mm a"
+        return f.string(from: nextReset)
+    }
+}
+
 /// The calculated billing window metrics for the current 5-hour window.
 struct BillingWindowMetrics {
     let outputTokens: Int

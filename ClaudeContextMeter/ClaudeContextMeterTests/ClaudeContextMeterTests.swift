@@ -374,6 +374,89 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(start!.timeIntervalSince1970, topOfHour.timeIntervalSince1970, accuracy: 1.0)
     }
 
+    // MARK: - WeeklyUsageCalculator window start
+
+    func testWeeklyWindowStartOnResetDayAfterResetHour() {
+        // Simulate: now = Tuesday at 10 PM, reset = Tuesday at 9 PM.
+        // Expected: window started this Tuesday at 9 PM.
+        let calendar = Calendar.current
+        // Find the most recent Tuesday.
+        var comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        comps.weekday = 3  // Tuesday
+        comps.hour = 22; comps.minute = 0; comps.second = 0
+        guard let now = calendar.nextDate(after: Date().addingTimeInterval(-8 * 24 * 3600),
+                                          matching: comps, matchingPolicy: .nextTime) else { return }
+
+        var resetComps = calendar.dateComponents([.year, .month, .day], from: now)
+        resetComps.hour = 21; resetComps.minute = 0; resetComps.second = 0
+        let expectedStart = calendar.date(from: resetComps)!
+
+        // Temporarily override UserDefaults to Tuesday 9 PM.
+        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+        }
+
+        let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        XCTAssertEqual(start.timeIntervalSince1970, expectedStart.timeIntervalSince1970, accuracy: 1.0)
+    }
+
+    func testWeeklyWindowStartOnResetDayBeforeResetHour() {
+        // Simulate: now = Tuesday at 8 PM, reset = Tuesday at 9 PM.
+        // Expected: window started LAST Tuesday at 9 PM (not today).
+        let calendar = Calendar.current
+        var comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        comps.weekday = 3
+        comps.hour = 20; comps.minute = 0; comps.second = 0
+        guard let now = calendar.nextDate(after: Date().addingTimeInterval(-8 * 24 * 3600),
+                                          matching: comps, matchingPolicy: .nextTime) else { return }
+
+        // Expected: last Tuesday at 9 PM = now's Tuesday - 7 days, hour set to 21
+        let lastTuesdaySameDay = calendar.date(byAdding: .day, value: -7, to: now)!
+        var resetComps = calendar.dateComponents([.year, .month, .day], from: lastTuesdaySameDay)
+        resetComps.hour = 21; resetComps.minute = 0; resetComps.second = 0
+        let expectedStart = calendar.date(from: resetComps)!
+
+        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+        }
+
+        let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        XCTAssertEqual(start.timeIntervalSince1970, expectedStart.timeIntervalSince1970, accuracy: 1.0)
+    }
+
+    func testWeeklyWindowStartOnNonResetDay() {
+        // Simulate: now = Wednesday at noon, reset = Tuesday at 9 PM.
+        // Expected: yesterday (Tuesday) at 9 PM.
+        let calendar = Calendar.current
+        var comps = calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        comps.weekday = 4  // Wednesday
+        comps.hour = 12; comps.minute = 0; comps.second = 0
+        guard let now = calendar.nextDate(after: Date().addingTimeInterval(-8 * 24 * 3600),
+                                          matching: comps, matchingPolicy: .nextTime) else { return }
+
+        // Expected: the Tuesday just before this Wednesday, at 9 PM
+        let tuesday = calendar.date(byAdding: .day, value: -1, to: now)!
+        var resetComps = calendar.dateComponents([.year, .month, .day], from: tuesday)
+        resetComps.hour = 21; resetComps.minute = 0; resetComps.second = 0
+        let expectedStart = calendar.date(from: resetComps)!
+
+        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        defer {
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+        }
+
+        let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        XCTAssertEqual(start.timeIntervalSince1970, expectedStart.timeIntervalSince1970, accuracy: 1.0)
+    }
+
     func testExpiredWindowReturnsNil() {
         let now = Date()
         let ts = [now.addingTimeInterval(-6 * 3600)]  // 6h ago — window expired

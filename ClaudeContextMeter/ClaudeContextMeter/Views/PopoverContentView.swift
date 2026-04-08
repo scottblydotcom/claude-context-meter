@@ -52,6 +52,14 @@ struct PopoverContentView: View {
 
             Divider()
 
+            // Weekly Usage
+            if let weekly = viewModel.weekly {
+                WeeklyUsageSection(metrics: weekly)
+                    .padding()
+            }
+
+            Divider()
+
             // Footer
             HStack {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
