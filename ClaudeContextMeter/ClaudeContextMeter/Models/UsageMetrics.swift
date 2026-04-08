@@ -9,11 +9,11 @@ import Foundation
 struct ContextWindowMetrics {
     let fileName: String
     let model: String
-    let totalTokens: Int
-    let contextLimit: Int
-    let inputTokens: Int
-    let cacheReadTokens: Int
-    let outputTokens: Int
+    let totalTokens: Int64
+    let contextLimit: Int64
+    let inputTokens: Int64
+    let cacheReadTokens: Int64
+    let outputTokens: Int64
 
     /// Percentage of context window filled (0–100).
     var fillPercent: Int {
@@ -25,14 +25,14 @@ struct ContextWindowMetrics {
 /// The calculated weekly usage metrics across all three token-counting methods.
 struct WeeklyUsageMetrics {
     /// input + cache_create + cache_read + output
-    let allTokens: Int
+    let allTokens: Int64
     /// input + cache_create + output (excludes cache reads)
-    let noCacheRead: Int
+    let noCacheRead: Int64
     /// input + output only
-    let inputOutputOnly: Int
+    let inputOutputOnly: Int64
     /// allTokens with 2× multiplier applied to tokens from peak-hour requests
     /// (Mon–Fri 5–11 AM PT), matching Anthropic's peak-usage billing behavior.
-    let peakAdjustedTokens: Int
+    let peakAdjustedTokens: Int64
     let windowStart: Date
     let nextReset: Date
 
@@ -57,8 +57,8 @@ struct WeeklyUsageMetrics {
 
 /// The calculated billing window metrics for the current 5-hour window.
 struct BillingWindowMetrics {
-    let outputTokens: Int
-    let tokenLimit: Int
+    let outputTokens: Int64
+    let tokenLimit: Int64
     let windowStart: Date
     let nextReset: Date
 

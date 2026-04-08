@@ -20,10 +20,10 @@ struct MessageContent: Codable {
 }
 
 struct UsageTokens: Codable {
-    let inputTokens: Int
-    let cacheCreationInputTokens: Int?
-    let cacheReadInputTokens: Int?
-    let outputTokens: Int
+    let inputTokens: Int64
+    let cacheCreationInputTokens: Int64?
+    let cacheReadInputTokens: Int64?
+    let outputTokens: Int64
 
     enum CodingKeys: String, CodingKey {
         case inputTokens = "input_tokens"
@@ -33,7 +33,7 @@ struct UsageTokens: Codable {
     }
 
     /// Total tokens consumed in this turn (input + cache + output).
-    var totalTokens: Int {
+    var totalTokens: Int64 {
         inputTokens + (cacheCreationInputTokens ?? 0) + (cacheReadInputTokens ?? 0) + outputTokens
     }
 }

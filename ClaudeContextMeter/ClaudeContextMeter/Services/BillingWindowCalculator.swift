@@ -11,12 +11,12 @@ enum BillingWindowCalculator {
     static let windowDuration: TimeInterval = 5 * 3600  // 5 hours
 
     /// Default output token limit (user-configurable to match their Claude plan).
-    static let defaultLimit = 131_000
+    static let defaultLimit: Int64 = 131_000
 
     /// The current billing token limit, falls back to default.
-    static var tokenLimit: Int {
+    static var tokenLimit: Int64 {
         let stored = UserDefaults.standard.integer(forKey: limitKey)
-        return stored > 0 ? stored : defaultLimit
+        return stored > 0 ? Int64(stored) : defaultLimit
     }
 
     /// Given a sorted array of record timestamps, returns the start of the current
@@ -59,7 +59,7 @@ enum BillingWindowCalculator {
         // partials are timestamped at request start, before the response finishes,
         // so they give us a more accurate window-start anchor than complete records.
         var earliestTimestamp: [String: Date] = [:]
-        var outputTokensByRequestId: [String: Int] = [:]
+        var outputTokensByRequestId: [String: Int64] = [:]
 
         for url in JSONLParser.allSessionFiles() {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
@@ -86,7 +86,7 @@ enum BillingWindowCalculator {
         }
 
         // Build records using earliest timestamps, only for requestIds with output tokens.
-        var records: [(timestamp: Date, outputTokens: Int)] = []
+        var records: [(timestamp: Date, outputTokens: Int64)] = []
         for (rid, outputTokens) in outputTokensByRequestId {
             guard let timestamp = earliestTimestamp[rid] else { continue }
             records.append((timestamp: timestamp, outputTokens: outputTokens))
@@ -101,7 +101,7 @@ enum BillingWindowCalculator {
         }
 
         let nextReset = windowStart.addingTimeInterval(windowDuration)
-        let totalOutputTokens = records
+        let totalOutputTokens: Int64 = records
             .filter { $0.timestamp >= windowStart }
             .reduce(0) { $0 + $1.outputTokens }
 
