@@ -13,7 +13,9 @@ struct ContextWindowSection: View {
             Text("Context Window")
                 .font(.headline)
 
-            GaugeRowView(label: "\(metrics.totalTokens.formatted()) / \(metrics.contextLimit.formatted()) tokens", percent: metrics.fillPercent)
+            GaugeRowView(
+                label: "\(metrics.totalTokens.formatted()) / \(metrics.contextLimit.formatted()) tokens",
+                percent: metrics.fillPercent)
 
             HStack(spacing: 12) {
                 statView(label: "Model", value: metrics.model)

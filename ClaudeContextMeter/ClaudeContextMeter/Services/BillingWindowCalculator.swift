@@ -29,10 +29,10 @@ enum BillingWindowCalculator {
 
         // Walk forward: each gap >= 5h starts a new window.
         var windowStartIndex = 0
-        for i in 1..<sortedTimestamps.count {
-            let gap = sortedTimestamps[i].timeIntervalSince(sortedTimestamps[i - 1])
+        for idx in 1..<sortedTimestamps.count {
+            let gap = sortedTimestamps[idx].timeIntervalSince(sortedTimestamps[idx - 1])
             if gap >= windowDuration {
-                windowStartIndex = i
+                windowStartIndex = idx
             }
         }
 
@@ -64,17 +64,17 @@ enum BillingWindowCalculator {
         for url in JSONLParser.allSessionFiles() {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
-                guard (record.type == "assistant" || record.type == "user"),
+                guard record.type == "assistant" || record.type == "user",
                       let rid = record.requestId,
-                      let ts = formatter.date(from: record.timestamp),
-                      ts >= lookback
+                      let timestamp = formatter.date(from: record.timestamp),
+                      timestamp >= lookback
                 else { continue }
 
                 // Keep the earliest timestamp for this requestId.
                 if let existing = earliestTimestamp[rid] {
-                    if ts < existing { earliestTimestamp[rid] = ts }
+                    if timestamp < existing { earliestTimestamp[rid] = timestamp }
                 } else {
-                    earliestTimestamp[rid] = ts
+                    earliestTimestamp[rid] = timestamp
                 }
 
                 // Collect output tokens from complete records only.
@@ -88,8 +88,8 @@ enum BillingWindowCalculator {
         // Build records using earliest timestamps, only for requestIds with output tokens.
         var records: [(timestamp: Date, outputTokens: Int)] = []
         for (rid, outputTokens) in outputTokensByRequestId {
-            guard let ts = earliestTimestamp[rid] else { continue }
-            records.append((timestamp: ts, outputTokens: outputTokens))
+            guard let timestamp = earliestTimestamp[rid] else { continue }
+            records.append((timestamp: timestamp, outputTokens: outputTokens))
         }
         records.sort { $0.timestamp < $1.timestamp }
 

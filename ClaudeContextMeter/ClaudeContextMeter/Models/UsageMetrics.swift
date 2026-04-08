@@ -39,19 +39,19 @@ struct WeeklyUsageMetrics {
     /// Human-readable time until next weekly reset, e.g. "3d 2h" or "4h 13m".
     var timeUntilReset: String {
         let secs = max(0, nextReset.timeIntervalSinceNow)
-        let d = Int(secs) / 86400
-        let h = (Int(secs) % 86400) / 3600
-        let m = (Int(secs) % 3600) / 60
-        if d > 0 { return "\(d)d \(h)h" }
-        if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
+        let days = Int(secs) / 86400
+        let hours = (Int(secs) % 86400) / 3600
+        let minutes = (Int(secs) % 3600) / 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
     }
 
     /// Formatted next reset label matching Claude's UI, e.g. "Tue 9:00 PM".
     var nextResetDisplay: String {
-        let f = DateFormatter()
-        f.dateFormat = "EEE h:mm a"
-        return f.string(from: nextReset)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEE h:mm a"
+        return formatter.string(from: nextReset)
     }
 }
 
@@ -71,10 +71,10 @@ struct BillingWindowMetrics {
     /// Human-readable time until next window reset, e.g. "4h 18m".
     var timeUntilReset: String {
         let seconds = max(0, nextReset.timeIntervalSinceNow)
-        let h = Int(seconds) / 3600
-        let m = (Int(seconds) % 3600) / 60
-        if h > 0 { return "\(h)h \(m)m" }
-        return "\(m)m"
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
     }
 
     /// Absolute clock time the current window started, e.g. "10:23 AM".
@@ -84,8 +84,8 @@ struct BillingWindowMetrics {
     var nextResetTime: String { Self.shortTime(nextReset) }
 
     private static func shortTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "h:mm a"
-        return f.string(from: date)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: date)
     }
 }

@@ -51,14 +51,15 @@ enum JSONLParser {
             options: [.skipsHiddenFiles]
         ) else { return nil }
 
-        var best: (url: URL, date: Date)? = nil
+        var best: (url: URL, date: Date)?
 
         for case let url as URL in enumerator {
             // Skip subagent files (path contains "/subagents/")
             guard url.pathExtension == "jsonl",
                   !url.path.contains("/subagents/") else { continue }
 
-            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            let date = values?.contentModificationDate ?? .distantPast
             if best == nil || date > best!.date {
                 best = (url, date)
             }

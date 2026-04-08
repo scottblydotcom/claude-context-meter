@@ -85,39 +85,39 @@ enum WeeklyUsageCalculator {
             guard let records = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in records {
                 guard record.isCompleteAssistantRecord,
-                      let rid     = record.requestId,
-                      let ts      = formatter.date(from: record.timestamp),
-                      ts >= windowStart, ts <= now,
-                      let usage   = record.message?.usage
+                      let rid = record.requestId,
+                      let timestamp = formatter.date(from: record.timestamp),
+                      timestamp >= windowStart, timestamp <= now,
+                      let usage = record.message?.usage
                 else { continue }
 
                 byRequest[rid] = Tally(
-                    input:       usage.inputTokens,
+                    input: usage.inputTokens,
                     cacheCreate: usage.cacheCreationInputTokens ?? 0,
-                    cacheRead:   usage.cacheReadInputTokens     ?? 0,
-                    output:      usage.outputTokens,
-                    isPeak:      isPeakHour(ts)
+                    cacheRead: usage.cacheReadInputTokens ?? 0,
+                    output: usage.outputTokens,
+                    isPeak: isPeakHour(timestamp)
                 )
             }
         }
 
         var totalInput = 0, totalCC = 0, totalCR = 0, totalOutput = 0
         var peakInput  = 0, peakCC  = 0, peakCR  = 0, peakOutput  = 0
-        for t in byRequest.values {
-            totalInput  += t.input;       totalCC += t.cacheCreate
-            totalCR     += t.cacheRead;   totalOutput += t.output
-            let m = t.isPeak ? 2 : 1
-            peakInput  += t.input * m;    peakCC += t.cacheCreate * m
-            peakCR     += t.cacheRead * m; peakOutput += t.output * m
+        for tally in byRequest.values {
+            totalInput += tally.input; totalCC += tally.cacheCreate
+            totalCR += tally.cacheRead; totalOutput += tally.output
+            let multiplier = tally.isPeak ? 2 : 1
+            peakInput += tally.input * multiplier; peakCC += tally.cacheCreate * multiplier
+            peakCR += tally.cacheRead * multiplier; peakOutput += tally.output * multiplier
         }
 
         return WeeklyUsageMetrics(
-            allTokens:           totalInput + totalCC + totalCR + totalOutput,
-            noCacheRead:         totalInput + totalCC + totalOutput,
-            inputOutputOnly:     totalInput + totalOutput,
-            peakAdjustedTokens:  peakInput  + peakCC  + peakCR  + peakOutput,
-            windowStart:         windowStart,
-            nextReset:           nextReset
+            allTokens: totalInput + totalCC + totalCR + totalOutput,
+            noCacheRead: totalInput + totalCC + totalOutput,
+            inputOutputOnly: totalInput + totalOutput,
+            peakAdjustedTokens: peakInput + peakCC + peakCR + peakOutput,
+            windowStart: windowStart,
+            nextReset: nextReset
         )
     }
 }

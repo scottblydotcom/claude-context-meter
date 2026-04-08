@@ -119,7 +119,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         }
         """
         let data = try XCTUnwrap(json.data(using: .utf8))
-        let usage = try JSONDecoder().decode(SessionRecord.UsageTokens.self, from: data)
+        let usage = try JSONDecoder().decode(UsageTokens.self, from: data)
 
         // 1000 + 500 + 2000 + 300 = 3800
         XCTAssertEqual(usage.totalTokens, 3800)
@@ -134,7 +134,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         }
         """
         let data = try XCTUnwrap(json.data(using: .utf8))
-        let usage = try JSONDecoder().decode(SessionRecord.UsageTokens.self, from: data)
+        let usage = try JSONDecoder().decode(UsageTokens.self, from: data)
 
         // 1000 + 0 + 0 + 300 = 1300
         XCTAssertEqual(usage.totalTokens, 1300)

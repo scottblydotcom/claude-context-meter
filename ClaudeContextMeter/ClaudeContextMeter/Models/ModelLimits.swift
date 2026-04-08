@@ -15,7 +15,7 @@ enum ModelLimits {
         // All current Claude models share a 200k context window.
         // This lookup exists so we can differentiate in the future.
         switch model {
-        case let m where m.hasPrefix("claude-"):
+        case let model where model.hasPrefix("claude-"):
             return 200_000
         default:
             return defaultContextWindow
