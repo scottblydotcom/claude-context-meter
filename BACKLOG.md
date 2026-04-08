@@ -41,6 +41,24 @@ Show peak-hour tokens as a percentage of total weekly tokens. Useful metric to h
 
 **Priority:** Medium
 
+### Desktop app chat token tracking
+**Added:** 2026-04-08 | **Priority:** Medium
+
+The Claude Mac Desktop app (chat interface, not Code tab) likely writes local session or cache data separately from `~/.claude/projects/`. Finding and parsing those files would make token tracking comprehensive for all local desktop usage.
+
+Follow-up: Anthropic may expose usage data via API in the future. An API-based approach would capture mobile, web, and multi-device usage that local file parsing can never reach. Add as a separate backlog item once the API exists.
+
+### Mac App Store distribution
+**Added:** 2026-04-08 | **Priority:** Future
+
+Distribute via Mac App Store. Requirements:
+- Apple Developer account ($99/yr)
+- App Sandbox entitlements (will need review — FSEvents file watching may need scoped bookmarks)
+- Notarization
+- App Review compliance
+
+Bundle ID `com.scottbly.ClaudeContextMeter` is valid since scottbly.com is owned.
+
 ## Bugs
 
 ### App hangs in uninterruptible kernel state on crash
