@@ -342,40 +342,42 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(metrics.timeUntilReset, "0m")
     }
 
-    // MARK: - BillingWindowCalculator window boundary math
+    // MARK: - BillingWindowCalculator rolling window math
 
-    func testWindowStartIsAnchorDuringFirstPeriod() {
-        // Anchor is 3 hours ago → we are still in the first 5-hour window.
-        // Expected window start = anchor (periods = floor(3/5) = 0).
-        let anchor = Date().addingTimeInterval(-3 * 3600)
-        BillingWindowCalculator.windowAnchor = anchor
-        defer { UserDefaults.standard.removeObject(forKey: BillingWindowCalculator.anchorKey) }
-
-        let windowStart = BillingWindowCalculator.currentWindowStart()
-        XCTAssertEqual(windowStart.timeIntervalSince1970, anchor.timeIntervalSince1970, accuracy: 1.0)
+    func testWindowStartWithSingleRecentRecord() {
+        let now = Date()
+        let ts = [now.addingTimeInterval(-1 * 3600)]  // 1h ago — active window
+        let expected = Calendar.current.dateInterval(of: .hour, for: ts[0])!.start
+        let start = BillingWindowCalculator.findWindowStart(from: ts, relativeTo: now)
+        XCTAssertNotNil(start)
+        XCTAssertEqual(start!.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
     }
 
-    func testWindowStartAdvancesAfterOnePeriod() {
-        // Anchor is 7 hours ago → one full 5-hour window has elapsed.
-        // Expected window start = anchor + 5h (periods = floor(7/5) = 1).
-        let anchor = Date().addingTimeInterval(-7 * 3600)
-        BillingWindowCalculator.windowAnchor = anchor
-        defer { UserDefaults.standard.removeObject(forKey: BillingWindowCalculator.anchorKey) }
-
-        let expected = anchor.addingTimeInterval(5 * 3600)
-        let windowStart = BillingWindowCalculator.currentWindowStart()
-        XCTAssertEqual(windowStart.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
+    func testGapDefinesNewWindowStart() {
+        let now = Date()
+        let old    = now.addingTimeInterval(-7 * 3600)  // 7h ago — expired window
+        let recent = now.addingTimeInterval(-1 * 3600)  // 1h ago — new window
+        let expected = Calendar.current.dateInterval(of: .hour, for: recent)!.start
+        let start = BillingWindowCalculator.findWindowStart(from: [old, recent], relativeTo: now)
+        XCTAssertNotNil(start)
+        XCTAssertEqual(start!.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
     }
 
-    func testWindowStartAdvancesAfterTwoPeriods() {
-        // Anchor is 11 hours ago → two full 5-hour windows have elapsed.
-        // Expected window start = anchor + 10h (periods = floor(11/5) = 2).
-        let anchor = Date().addingTimeInterval(-11 * 3600)
-        BillingWindowCalculator.windowAnchor = anchor
-        defer { UserDefaults.standard.removeObject(forKey: BillingWindowCalculator.anchorKey) }
+    func testWindowStartIsAnchoredToTopOfHour() {
+        // A record at 41 minutes past the hour should anchor the window to the top of that hour.
+        let calendar = Calendar.current
+        let now = Date()
+        let topOfHour = calendar.dateInterval(of: .hour, for: now.addingTimeInterval(-1 * 3600))!.start
+        let recordAt41Min = topOfHour.addingTimeInterval(41 * 60)
+        let start = BillingWindowCalculator.findWindowStart(from: [recordAt41Min], relativeTo: now)
+        XCTAssertNotNil(start)
+        XCTAssertEqual(start!.timeIntervalSince1970, topOfHour.timeIntervalSince1970, accuracy: 1.0)
+    }
 
-        let expected = anchor.addingTimeInterval(10 * 3600)
-        let windowStart = BillingWindowCalculator.currentWindowStart()
-        XCTAssertEqual(windowStart.timeIntervalSince1970, expected.timeIntervalSince1970, accuracy: 1.0)
+    func testExpiredWindowReturnsNil() {
+        let now = Date()
+        let ts = [now.addingTimeInterval(-6 * 3600)]  // 6h ago — window expired
+        let start = BillingWindowCalculator.findWindowStart(from: ts, relativeTo: now)
+        XCTAssertNil(start)
     }
 }

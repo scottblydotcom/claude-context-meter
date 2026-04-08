@@ -20,6 +20,14 @@ struct BillingWindowSection: View {
             }
 
             GaugeRowView(label: "\(metrics.outputTokens.formatted()) / \(metrics.tokenLimit.formatted()) output tokens", percent: metrics.fillPercent)
+
+            HStack {
+                Text("started \(metrics.windowStartTime)")
+                Spacer()
+                Text("resets at \(metrics.nextResetTime)")
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
     }
 }

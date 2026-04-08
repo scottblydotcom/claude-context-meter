@@ -43,4 +43,16 @@ struct BillingWindowMetrics {
         if h > 0 { return "\(h)h \(m)m" }
         return "\(m)m"
     }
+
+    /// Absolute clock time the current window started, e.g. "10:23 AM".
+    var windowStartTime: String { Self.shortTime(windowStart) }
+
+    /// Absolute clock time of the next reset, e.g. "3:23 PM".
+    var nextResetTime: String { Self.shortTime(nextReset) }
+
+    private static func shortTime(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "h:mm a"
+        return f.string(from: date)
+    }
 }
