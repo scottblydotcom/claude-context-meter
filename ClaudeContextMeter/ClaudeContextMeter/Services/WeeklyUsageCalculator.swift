@@ -54,8 +54,21 @@ enum WeeklyUsageCalculator {
         return calendar.date(byAdding: .day, value: -7, to: now)!
     }
 
+    /// Returns true if `date` falls within Anthropic's peak-usage hours:
+    /// Monday–Friday, 5 AM–10:59 AM Pacific Time.
+    ///
+    /// During peak hours Anthropic counts tokens ~2× faster against the weekly limit.
+    static func isPeakHour(_ date: Date) -> Bool {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        let comps = cal.dateComponents([.weekday, .hour], from: date)
+        guard let weekday = comps.weekday, let hour = comps.hour else { return false }
+        // weekday: 1=Sun, 2=Mon … 6=Fri, 7=Sat
+        return (2...6).contains(weekday) && (5..<11).contains(hour)
+    }
+
     /// Scans all JSONL files and sums tokens since the start of the current weekly window,
-    /// returning counts for all three candidate counting methods.
+    /// returning counts for all three candidate counting methods plus a peak-adjusted total.
     static func calculate() -> WeeklyUsageMetrics {
         let now         = Date()
         let windowStart = findWeeklyWindowStart(relativeTo: now)
@@ -65,7 +78,7 @@ enum WeeklyUsageCalculator {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         // Deduplicate by requestId; keep only complete records within the window.
-        struct Tally { var input, cacheCreate, cacheRead, output: Int }
+        struct Tally { var input, cacheCreate, cacheRead, output: Int; var isPeak: Bool }
         var byRequest: [String: Tally] = [:]
 
         for url in JSONLParser.allSessionFiles() {
@@ -82,25 +95,29 @@ enum WeeklyUsageCalculator {
                     input:       usage.inputTokens,
                     cacheCreate: usage.cacheCreationInputTokens ?? 0,
                     cacheRead:   usage.cacheReadInputTokens     ?? 0,
-                    output:      usage.outputTokens
+                    output:      usage.outputTokens,
+                    isPeak:      isPeakHour(ts)
                 )
             }
         }
 
         var totalInput = 0, totalCC = 0, totalCR = 0, totalOutput = 0
+        var peakInput  = 0, peakCC  = 0, peakCR  = 0, peakOutput  = 0
         for t in byRequest.values {
-            totalInput  += t.input
-            totalCC     += t.cacheCreate
-            totalCR     += t.cacheRead
-            totalOutput += t.output
+            totalInput  += t.input;       totalCC += t.cacheCreate
+            totalCR     += t.cacheRead;   totalOutput += t.output
+            let m = t.isPeak ? 2 : 1
+            peakInput  += t.input * m;    peakCC += t.cacheCreate * m
+            peakCR     += t.cacheRead * m; peakOutput += t.output * m
         }
 
         return WeeklyUsageMetrics(
-            allTokens:      totalInput + totalCC + totalCR + totalOutput,
-            noCacheRead:    totalInput + totalCC + totalOutput,
-            inputOutputOnly: totalInput + totalOutput,
-            windowStart:    windowStart,
-            nextReset:      nextReset
+            allTokens:           totalInput + totalCC + totalCR + totalOutput,
+            noCacheRead:         totalInput + totalCC + totalOutput,
+            inputOutputOnly:     totalInput + totalOutput,
+            peakAdjustedTokens:  peakInput  + peakCC  + peakCR  + peakOutput,
+            windowStart:         windowStart,
+            nextReset:           nextReset
         )
     }
 }

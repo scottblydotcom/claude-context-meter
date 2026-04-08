@@ -463,4 +463,53 @@ final class ClaudeContextMeterTests: XCTestCase {
         let start = BillingWindowCalculator.findWindowStart(from: ts, relativeTo: now)
         XCTAssertNil(start)
     }
+
+    // MARK: - WeeklyUsageCalculator.isPeakHour
+
+    private func ptDate(weekday: Int, hour: Int, minute: Int = 0) -> Date {
+        // weekday: 1=Sun, 2=Mon … 7=Sat (Calendar convention)
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
+        // Find a recent date matching the target weekday.
+        var comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
+        comps.weekday = weekday
+        comps.hour = hour; comps.minute = minute; comps.second = 0
+        return cal.nextDate(after: Date().addingTimeInterval(-8 * 24 * 3600),
+                            matching: comps, matchingPolicy: .nextTime)!
+    }
+
+    func testPeakHourMidMorningWeekday() {
+        // Tuesday 8 AM PT — squarely in peak
+        XCTAssertTrue(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 3, hour: 8)))
+    }
+
+    func testPeakHourBoundaryStartInclusive() {
+        // Monday 5:00 AM PT — exactly at start, should be peak
+        XCTAssertTrue(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 2, hour: 5, minute: 0)))
+    }
+
+    func testPeakHourBoundaryEndExclusive() {
+        // Friday 11:00 AM PT — exactly at end, should NOT be peak
+        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 6, hour: 11, minute: 0)))
+    }
+
+    func testPeakHourBefore5AM() {
+        // Wednesday 4:59 AM PT — before peak window
+        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 4, hour: 4, minute: 59)))
+    }
+
+    func testPeakHourAfternoonWeekday() {
+        // Thursday 2 PM PT — after peak window
+        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 5, hour: 14)))
+    }
+
+    func testPeakHourSaturdayDuringPeakWindow() {
+        // Saturday 8 AM PT — peak time slot but weekend, should NOT be peak
+        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 7, hour: 8)))
+    }
+
+    func testPeakHourSundayDuringPeakWindow() {
+        // Sunday 9 AM PT — peak time slot but weekend, should NOT be peak
+        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 1, hour: 9)))
+    }
 }

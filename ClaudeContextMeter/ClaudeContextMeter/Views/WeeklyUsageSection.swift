@@ -23,6 +23,7 @@ struct WeeklyUsageSection: View {
                 row(label: "All tokens",        value: metrics.allTokens)
                 row(label: "Excl. cache reads", value: metrics.noCacheRead)
                 row(label: "Input + output",    value: metrics.inputOutputOnly)
+                row(label: "Peak-adjusted",     value: metrics.peakAdjustedTokens)
             }
         }
     }
@@ -41,11 +42,12 @@ struct WeeklyUsageSection: View {
 
 #Preview {
     WeeklyUsageSection(metrics: WeeklyUsageMetrics(
-        allTokens:       1_158_100,
-        noCacheRead:        63_560,
-        inputOutputOnly:    21_550,
-        windowStart:     Date().addingTimeInterval(-3600),
-        nextReset:       Date().addingTimeInterval(6 * 24 * 3600)
+        allTokens:           1_158_100,
+        noCacheRead:            63_560,
+        inputOutputOnly:        21_550,
+        peakAdjustedTokens:  1_420_800,
+        windowStart:         Date().addingTimeInterval(-3600),
+        nextReset:           Date().addingTimeInterval(6 * 24 * 3600)
     ))
     .padding()
     .frame(width: 320)
