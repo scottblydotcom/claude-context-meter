@@ -9,6 +9,13 @@ Create a public GitHub repo, push the project, and set up Issues for tracking go
 
 **Priority:** Soon
 
+### Pin semgrep Docker image to a specific version tag
+**Added:** 2026-04-08
+
+`security.yml` uses `image: semgrep/semgrep` (latest) rather than a pinned version like `semgrep/semgrep:1.x.x`. Docker image tags are mutable like GitHub Action tags — floating `latest` exposes the pipeline to supply chain attacks. Pin to a specific version tag.
+
+**Priority:** Medium
+
 ## Features
 
 ### Best practice tips
