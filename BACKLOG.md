@@ -48,6 +48,16 @@ The Claude Mac Desktop app (chat interface, not Code tab) likely writes local se
 
 Follow-up: Anthropic may expose usage data via API in the future. An API-based approach would capture mobile, web, and multi-device usage that local file parsing can never reach. Add as a separate backlog item once the API exists.
 
+### Uninstaller
+**Added:** 2026-04-08 | **Priority:** Medium
+
+Provide a clean uninstall path for users. Should remove:
+- The app from `/Applications`
+- `UserDefaults` prefs (`com.scottbly.ClaudeContextMeter`)
+- Launch at Login registration (SMAppService)
+
+Could be a shell script shipped with the DMG, or a menu item in the app itself.
+
 ### Mac App Store distribution
 **Added:** 2026-04-08 | **Priority:** Future
 
