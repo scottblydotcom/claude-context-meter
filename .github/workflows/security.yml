@@ -20,15 +20,17 @@ jobs:
 
   semgrep:
     name: Semgrep — Static Analysis
+    needs: gitleaks
     runs-on: ubuntu-latest
     container:
-      image: semgrep/semgrep
+      image: semgrep/semgrep@sha256:17d89ddd91a7729bbd5de09402f7f79a70204289e2a94635086e9db532a495f2 # v1.157.0
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - run: semgrep --config auto --error ClaudeContextMeter/ClaudeContextMeter/
 
   trivy:
     name: Trivy — Vulnerability Scan
+    needs: gitleaks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -41,6 +43,7 @@ jobs:
 
   swiftlint:
     name: SwiftLint — Swift Style & Lint
+    needs: gitleaks
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
