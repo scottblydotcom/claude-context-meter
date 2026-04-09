@@ -24,6 +24,7 @@ struct WeeklyUsageSection: View {
                 row(label: "Excl. cache reads", value: metrics.noCacheRead)
                 row(label: "Input + output", value: metrics.inputOutputOnly)
                 row(label: "Peak-adjusted", value: metrics.peakAdjustedTokens)
+                costRow(label: "Cost-weighted", value: metrics.costWeighted)
             }
         }
     }
@@ -38,6 +39,17 @@ struct WeeklyUsageSection: View {
         }
         .font(.caption)
     }
+
+    private func costRow(label: String, value: Double) -> some View {
+        HStack {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(value, format: .currency(code: "USD"))
+                .monospacedDigit()
+        }
+        .font(.caption)
+    }
 }
 
 #Preview {
@@ -46,6 +58,7 @@ struct WeeklyUsageSection: View {
         noCacheRead: 63_560,
         inputOutputOnly: 21_550,
         peakAdjustedTokens: 1_420_800,
+        costWeighted: 9.07,
         windowStart: Date().addingTimeInterval(-3600),
         nextReset: Date().addingTimeInterval(6 * 24 * 3600)
     ))

@@ -54,6 +54,21 @@ enum WeeklyUsageCalculator {
         return calendar.date(byAdding: .day, value: -7, to: now)!
     }
 
+    /// Pricing per million tokens (USD). Defaults to Sonnet 4.6 rates for unknown models.
+    private static func tokenCost(model: String, input: Int64, cacheCreate: Int64, cacheRead: Int64, output: Int64) -> Double {
+        let inputRate, ccRate, crRate, outputRate: Double
+        if model.contains("haiku") {
+            inputRate = 0.80; ccRate = 1.00; crRate = 0.08; outputRate = 4.00
+        } else {
+            inputRate = 3.00; ccRate = 3.75; crRate = 0.30; outputRate = 15.00
+        }
+        let perM = 1_000_000.0
+        return Double(input)       / perM * inputRate
+             + Double(cacheCreate) / perM * ccRate
+             + Double(cacheRead)   / perM * crRate
+             + Double(output)      / perM * outputRate
+    }
+
     /// Returns true if `date` falls within Anthropic's peak-usage hours:
     /// Monday–Friday, 5 AM–10:59 AM Pacific Time.
     ///
@@ -78,7 +93,11 @@ enum WeeklyUsageCalculator {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         // Deduplicate by requestId; keep only complete records within the window.
-        struct Tally { var input, cacheCreate, cacheRead, output: Int64; var isPeak: Bool }
+        struct Tally {
+            var input, cacheCreate, cacheRead, output: Int64
+            var isPeak: Bool
+            var model: String
+        }
         var byRequest: [String: Tally] = [:]
 
         for url in JSONLParser.allSessionFiles() {
@@ -96,19 +115,22 @@ enum WeeklyUsageCalculator {
                     cacheCreate: usage.cacheCreationInputTokens ?? 0,
                     cacheRead: usage.cacheReadInputTokens ?? 0,
                     output: usage.outputTokens,
-                    isPeak: isPeakHour(timestamp)
+                    isPeak: isPeakHour(timestamp),
+                    model: record.message?.model ?? ""
                 )
             }
         }
 
         var totalInput: Int64 = 0, totalCC: Int64 = 0, totalCR: Int64 = 0, totalOutput: Int64 = 0
         var peakInput: Int64  = 0, peakCC: Int64  = 0, peakCR: Int64  = 0, peakOutput: Int64  = 0
+        var totalCost: Double = 0
         for tally in byRequest.values {
             totalInput += tally.input; totalCC += tally.cacheCreate
             totalCR += tally.cacheRead; totalOutput += tally.output
             let multiplier: Int64 = tally.isPeak ? 2 : 1
             peakInput += tally.input * multiplier; peakCC += tally.cacheCreate * multiplier
             peakCR += tally.cacheRead * multiplier; peakOutput += tally.output * multiplier
+            totalCost += tokenCost(model: tally.model, input: tally.input, cacheCreate: tally.cacheCreate, cacheRead: tally.cacheRead, output: tally.output)
         }
 
         return WeeklyUsageMetrics(
@@ -116,6 +138,7 @@ enum WeeklyUsageCalculator {
             noCacheRead: totalInput + totalCC + totalOutput,
             inputOutputOnly: totalInput + totalOutput,
             peakAdjustedTokens: peakInput + peakCC + peakCR + peakOutput,
+            costWeighted: totalCost,
             windowStart: windowStart,
             nextReset: nextReset
         )

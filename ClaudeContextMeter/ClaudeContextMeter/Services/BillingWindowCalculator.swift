@@ -38,9 +38,20 @@ enum BillingWindowCalculator {
 
         let rawStart = sortedTimestamps[windowStartIndex]
         // Anthropic anchors the billing window to the top of the hour of the first request.
-        let windowStart = Calendar.current.dateInterval(of: .hour, for: rawStart)?.start ?? rawStart
-        let nextReset = windowStart.addingTimeInterval(windowDuration)
-        return nextReset > now ? windowStart : nil
+        var windowStart = Calendar.current.dateInterval(of: .hour, for: rawStart)?.start ?? rawStart
+
+        // Cycle forward by windowDuration until we find the window that is currently
+        // active. This handles mid-session rollovers where the 5h window expires while
+        // the user is still chatting (no 5h gap in JSONL data to detect the boundary).
+        while true {
+            let nextReset = windowStart.addingTimeInterval(windowDuration)
+            if nextReset > now {
+                return windowStart
+            }
+            // This window has expired. Advance only if there are records in the next cycle.
+            guard sortedTimestamps.contains(where: { $0 >= nextReset }) else { return nil }
+            windowStart = nextReset
+        }
     }
 
     /// Scans JSONL files, derives the rolling window start from record timestamps,
@@ -95,9 +106,9 @@ enum BillingWindowCalculator {
 
         let timestamps = records.map { $0.timestamp }
         guard let windowStart = findWindowStart(from: timestamps, relativeTo: now) else {
-            // No active window — reset has already occurred or no usage recorded.
+            // No active window detected — no recent JSONL data.
             return BillingWindowMetrics(outputTokens: 0, tokenLimit: tokenLimit,
-                                        windowStart: now, nextReset: now)
+                                        windowStart: now, nextReset: now.addingTimeInterval(windowDuration))
         }
 
         let nextReset = windowStart.addingTimeInterval(windowDuration)
