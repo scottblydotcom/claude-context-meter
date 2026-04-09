@@ -40,17 +40,23 @@ enum BillingWindowCalculator {
         // Anthropic anchors the billing window to the top of the hour of the first request.
         var windowStart = Calendar.current.dateInterval(of: .hour, for: rawStart)?.start ?? rawStart
 
-        // Cycle forward by windowDuration until we find the window that is currently
-        // active. This handles mid-session rollovers where the 5h window expires while
-        // the user is still chatting (no 5h gap in JSONL data to detect the boundary).
+        // Cycle forward through expired windows. When a window expires, Anthropic starts
+        // the next window anchored to the top of the hour of the FIRST request after the
+        // reset — not simply windowStart + windowDuration. Using nextReset as the new
+        // anchor is wrong when the user paused after the reset (e.g., window expired at
+        // 11:00 AM, next request at 12:23 PM → new window is 12:00 PM–5:00 PM, not
+        // 11:00 AM–4:00 PM).
         while true {
             let nextReset = windowStart.addingTimeInterval(windowDuration)
             if nextReset > now {
                 return windowStart
             }
-            // This window has expired. Advance only if there are records in the next cycle.
-            guard sortedTimestamps.contains(where: { $0 >= nextReset }) else { return nil }
-            windowStart = nextReset
+            // This window has expired. Find the first record that opened the next window
+            // and re-anchor to the top of THAT hour.
+            guard let firstInNextWindow = sortedTimestamps.first(where: { $0 >= nextReset }) else {
+                return nil
+            }
+            windowStart = Calendar.current.dateInterval(of: .hour, for: firstInNextWindow)?.start ?? firstInNextWindow
         }
     }
 

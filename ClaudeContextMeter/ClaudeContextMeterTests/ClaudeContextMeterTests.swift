@@ -457,6 +457,42 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(start.timeIntervalSince1970, expectedStart.timeIntervalSince1970, accuracy: 1.0)
     }
 
+    /// Window 1 expired at 11:00 AM. User came back at 12:23 PM (next hour).
+    /// The new window should anchor to 12:00 PM, not 11:00 AM.
+    /// Bug: the old cycling code used `windowStart = nextReset` (11:00 AM),
+    /// then cycled again to 4:00 PM — massively undercounting tokens.
+    func testCyclingAnchorsToFirstRecordInNewWindow() {
+        let calendar = Calendar.current
+        let now = Date()
+
+        // Pin "now" to a known top-of-hour 6h in the future so arithmetic is clean.
+        let base = calendar.dateInterval(of: .hour, for: now)!.start
+            .addingTimeInterval(6 * 3600)
+
+        // Window 1 first request: base - 6h47m → floor = base - 7h
+        let w1Record1 = base.addingTimeInterval(-6 * 3600 - 47 * 60)
+        // Window 1 second record: base - 5h30m (still in window 1)
+        let w1Record2 = base.addingTimeInterval(-5 * 3600 - 30 * 60)
+        // Window 1 expired at floor(w1Record1) + 5h = (base - 7h) + 5h = base - 2h
+        // Window 2 first request: base - 1h37m → floor = base - 2h
+        // (but first request is 23 min AFTER the reset, i.e., in the next hour slot)
+        let w2Record1 = base.addingTimeInterval(-1 * 3600 - 37 * 60)
+        let w2Record2 = base.addingTimeInterval(-30 * 60)
+
+        let timestamps = [w1Record1, w1Record2, w2Record1, w2Record2].sorted()
+
+        let expectedWindowStart = calendar.dateInterval(of: .hour, for: w2Record1)!.start
+
+        let result = BillingWindowCalculator.findWindowStart(from: timestamps, relativeTo: base)
+        XCTAssertNotNil(result, "Should find an active window")
+        XCTAssertEqual(
+            result!.timeIntervalSince1970,
+            expectedWindowStart.timeIntervalSince1970,
+            accuracy: 1.0,
+            "Window 2 should anchor to the floor of the first record after window 1 expired"
+        )
+    }
+
     func testExpiredWindowReturnsNil() {
         let now = Date()
         let ts = [now.addingTimeInterval(-6 * 3600)]  // 6h ago — window expired
