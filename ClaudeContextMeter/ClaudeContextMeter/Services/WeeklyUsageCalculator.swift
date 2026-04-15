@@ -84,6 +84,12 @@ enum WeeklyUsageCalculator {
         return (2...6).contains(weekday) && (5..<11).contains(hour)
     }
 
+    private struct Tally {
+        var input, cacheCreate, cacheRead, output: Int64
+        var isPeak: Bool
+        var model: String
+    }
+
     /// Scans all JSONL files and sums tokens since the start of the current weekly window,
     /// returning counts for all three candidate counting methods plus a peak-adjusted total.
     static func calculate() -> WeeklyUsageMetrics {
@@ -95,11 +101,6 @@ enum WeeklyUsageCalculator {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
         // Deduplicate by requestId; keep only complete records within the window.
-        struct Tally {
-            var input, cacheCreate, cacheRead, output: Int64
-            var isPeak: Bool
-            var model: String
-        }
         var byRequest: [String: Tally] = [:]
 
         for url in JSONLParser.allSessionFiles() {
@@ -123,29 +124,38 @@ enum WeeklyUsageCalculator {
             }
         }
 
-        var totalInput: Int64 = 0, totalCC: Int64 = 0, totalCR: Int64 = 0, totalOutput: Int64 = 0
-        var peakInput: Int64  = 0, peakCC: Int64  = 0, peakCR: Int64  = 0, peakOutput: Int64  = 0
-        var totalCost: Double = 0
-        for tally in byRequest.values {
-            totalInput += tally.input; totalCC += tally.cacheCreate
-            totalCR += tally.cacheRead; totalOutput += tally.output
-            let multiplier: Int64 = tally.isPeak ? 2 : 1
-            peakInput += tally.input * multiplier; peakCC += tally.cacheCreate * multiplier
-            peakCR += tally.cacheRead * multiplier; peakOutput += tally.output * multiplier
-            totalCost += tokenCost(
+        let totals = accumulateTotals(byRequest.values)
+        return WeeklyUsageMetrics(
+            allTokens: totals.input + totals.cc + totals.cr + totals.output,
+            noCacheRead: totals.input + totals.cc + totals.output,
+            inputOutputOnly: totals.input + totals.output,
+            peakAdjustedTokens: totals.peakInput + totals.peakCC + totals.peakCR + totals.peakOutput,
+            costWeighted: totals.cost,
+            windowStart: windowStart,
+            nextReset: nextReset
+        )
+    }
+
+    private struct Totals {
+        var input, cc, cr, output: Int64
+        var peakInput, peakCC, peakCR, peakOutput: Int64
+        var cost: Double
+    }
+
+    private static func accumulateTotals(_ tallies: some Collection<Tally>) -> Totals {
+        var t = Totals(input: 0, cc: 0, cr: 0, output: 0,
+                       peakInput: 0, peakCC: 0, peakCR: 0, peakOutput: 0, cost: 0)
+        for tally in tallies {
+            t.input += tally.input; t.cc += tally.cacheCreate
+            t.cr += tally.cacheRead; t.output += tally.output
+            let m: Int64 = tally.isPeak ? 2 : 1
+            t.peakInput += tally.input * m; t.peakCC += tally.cacheCreate * m
+            t.peakCR += tally.cacheRead * m; t.peakOutput += tally.output * m
+            t.cost += tokenCost(
                 model: tally.model, input: tally.input,
                 cacheCreate: tally.cacheCreate, cacheRead: tally.cacheRead, output: tally.output
             )
         }
-
-        return WeeklyUsageMetrics(
-            allTokens: totalInput + totalCC + totalCR + totalOutput,
-            noCacheRead: totalInput + totalCC + totalOutput,
-            inputOutputOnly: totalInput + totalOutput,
-            peakAdjustedTokens: peakInput + peakCC + peakCR + peakOutput,
-            costWeighted: totalCost,
-            windowStart: windowStart,
-            nextReset: nextReset
-        )
+        return t
     }
 }
