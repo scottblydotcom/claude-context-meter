@@ -44,7 +44,8 @@ enum JSONLParser {
         return (enumerator.allObjects as? [URL] ?? [])
             .filter {
                 guard $0.pathExtension == "jsonl" else { return false }
-                let modified = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                let values = try? $0.resourceValues(forKeys: [.contentModificationDateKey])
+                let modified = values?.contentModificationDate ?? .distantPast
                 return modified >= date
             }
     }
