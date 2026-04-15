@@ -55,7 +55,9 @@ enum WeeklyUsageCalculator {
     }
 
     /// Pricing per million tokens (USD). Defaults to Sonnet 4.6 rates for unknown models.
-    private static func tokenCost(model: String, input: Int64, cacheCreate: Int64, cacheRead: Int64, output: Int64) -> Double {
+    private static func tokenCost(
+        model: String, input: Int64, cacheCreate: Int64, cacheRead: Int64, output: Int64
+    ) -> Double {
         let inputRate, ccRate, crRate, outputRate: Double
         if model.contains("haiku") {
             inputRate = 0.80; ccRate = 1.00; crRate = 0.08; outputRate = 4.00
@@ -130,7 +132,10 @@ enum WeeklyUsageCalculator {
             let multiplier: Int64 = tally.isPeak ? 2 : 1
             peakInput += tally.input * multiplier; peakCC += tally.cacheCreate * multiplier
             peakCR += tally.cacheRead * multiplier; peakOutput += tally.output * multiplier
-            totalCost += tokenCost(model: tally.model, input: tally.input, cacheCreate: tally.cacheCreate, cacheRead: tally.cacheRead, output: tally.output)
+            totalCost += tokenCost(
+                model: tally.model, input: tally.input,
+                cacheCreate: tally.cacheCreate, cacheRead: tally.cacheRead, output: tally.output
+            )
         }
 
         return WeeklyUsageMetrics(
