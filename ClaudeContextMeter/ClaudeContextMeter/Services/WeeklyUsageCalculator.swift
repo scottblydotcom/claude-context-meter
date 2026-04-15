@@ -54,16 +54,22 @@ enum WeeklyUsageCalculator {
         return calendar.date(byAdding: .day, value: -7, to: now)!
     }
 
-    /// Pricing per million tokens (USD). Defaults to Sonnet 4.6 rates for unknown models.
+    /// Pricing per million tokens (USD). Cache creation = 1.25x input rate; cache read = 0.1x input rate.
+    /// Defaults to Sonnet rates for unknown models.
     private static func tokenCost(
         model: String, input: Int64, cacheCreate: Int64, cacheRead: Int64, output: Int64
     ) -> Double {
-        let inputRate, ccRate, crRate, outputRate: Double
-        if model.contains("haiku") {
-            inputRate = 0.80; ccRate = 1.00; crRate = 0.08; outputRate = 4.00
+        let inputRate: Double
+        let outputRate: Double
+        if model.contains("opus") {
+            inputRate = 15.00; outputRate = 75.00
+        } else if model.contains("haiku") {
+            inputRate = 0.80; outputRate = 4.00
         } else {
-            inputRate = 3.00; ccRate = 3.75; crRate = 0.30; outputRate = 15.00
+            inputRate = 3.00; outputRate = 15.00
         }
+        let ccRate = inputRate * 1.25
+        let crRate = inputRate * 0.1
         let perM = 1_000_000.0
         return Double(input)       / perM * inputRate
              + Double(cacheCreate) / perM * ccRate
