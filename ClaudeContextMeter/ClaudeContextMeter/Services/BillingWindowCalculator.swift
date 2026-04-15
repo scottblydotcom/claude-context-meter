@@ -38,9 +38,26 @@ enum BillingWindowCalculator {
 
         let rawStart = sortedTimestamps[windowStartIndex]
         // Anthropic anchors the billing window to the top of the hour of the first request.
-        let windowStart = Calendar.current.dateInterval(of: .hour, for: rawStart)?.start ?? rawStart
-        let nextReset = windowStart.addingTimeInterval(windowDuration)
-        return nextReset > now ? windowStart : nil
+        var windowStart = Calendar.current.dateInterval(of: .hour, for: rawStart)?.start ?? rawStart
+
+        // Cycle forward through expired windows. When a window expires, Anthropic starts
+        // the next window anchored to the top of the hour of the FIRST request after the
+        // reset — not simply windowStart + windowDuration. Using nextReset as the new
+        // anchor is wrong when the user paused after the reset (e.g., window expired at
+        // 11:00 AM, next request at 12:23 PM → new window is 12:00 PM–5:00 PM, not
+        // 11:00 AM–4:00 PM).
+        while true {
+            let nextReset = windowStart.addingTimeInterval(windowDuration)
+            if nextReset > now {
+                return windowStart
+            }
+            // This window has expired. Find the first record that opened the next window
+            // and re-anchor to the top of THAT hour.
+            guard let firstInNextWindow = sortedTimestamps.first(where: { $0 >= nextReset }) else {
+                return nil
+            }
+            windowStart = Calendar.current.dateInterval(of: .hour, for: firstInNextWindow)?.start ?? firstInNextWindow
+        }
     }
 
     /// Scans JSONL files, derives the rolling window start from record timestamps,
@@ -95,9 +112,9 @@ enum BillingWindowCalculator {
 
         let timestamps = records.map { $0.timestamp }
         guard let windowStart = findWindowStart(from: timestamps, relativeTo: now) else {
-            // No active window — reset has already occurred or no usage recorded.
+            // No active window detected — no recent JSONL data.
             return BillingWindowMetrics(outputTokens: 0, tokenLimit: tokenLimit,
-                                        windowStart: now, nextReset: now)
+                                        windowStart: now, nextReset: now.addingTimeInterval(windowDuration))
         }
 
         let nextReset = windowStart.addingTimeInterval(windowDuration)

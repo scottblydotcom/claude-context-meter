@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct MessageContent: Codable {
+struct MessageContent: Codable, Sendable {
     let model: String?
     let stopReason: String?  // null during streaming, "end_turn" when complete
     let usage: UsageTokens?
@@ -19,7 +19,7 @@ struct MessageContent: Codable {
     }
 }
 
-struct UsageTokens: Codable {
+struct UsageTokens: Codable, Sendable {
     let inputTokens: Int64
     let cacheCreationInputTokens: Int64?
     let cacheReadInputTokens: Int64?
@@ -39,7 +39,7 @@ struct UsageTokens: Codable {
 }
 
 /// One line of a Claude JSONL session log file.
-struct SessionRecord: Codable {
+struct SessionRecord: Codable, Sendable {
     let type: String           // "assistant" or "user"
     let requestId: String?
     let sessionId: String?
