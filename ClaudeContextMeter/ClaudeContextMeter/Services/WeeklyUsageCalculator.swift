@@ -109,7 +109,7 @@ enum WeeklyUsageCalculator {
         // Deduplicate by requestId; keep only complete records within the window.
         var byRequest: [String: Tally] = [:]
 
-        for url in JSONLParser.allSessionFiles() {
+        for url in JSONLParser.allSessionFiles(modifiedSince: windowStart) {
             guard let records = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in records {
                 guard record.isCompleteAssistantRecord,
