@@ -126,8 +126,8 @@ enum WeeklyUsageCalculator {
 
         let totals = accumulateTotals(byRequest.values)
         return WeeklyUsageMetrics(
-            allTokens: totals.input + totals.cc + totals.cr + totals.output,
-            noCacheRead: totals.input + totals.cc + totals.output,
+            allTokens: totals.input + totals.cacheCreate + totals.cacheRead + totals.output,
+            noCacheRead: totals.input + totals.cacheCreate + totals.output,
             inputOutputOnly: totals.input + totals.output,
             peakAdjustedTokens: totals.peakInput + totals.peakCC + totals.peakCR + totals.peakOutput,
             costWeighted: totals.cost,
@@ -137,25 +137,25 @@ enum WeeklyUsageCalculator {
     }
 
     private struct Totals {
-        var input, cc, cr, output: Int64
+        var input, cacheCreate, cacheRead, output: Int64
         var peakInput, peakCC, peakCR, peakOutput: Int64
         var cost: Double
     }
 
     private static func accumulateTotals(_ tallies: some Collection<Tally>) -> Totals {
-        var t = Totals(input: 0, cc: 0, cr: 0, output: 0,
-                       peakInput: 0, peakCC: 0, peakCR: 0, peakOutput: 0, cost: 0)
+        var acc = Totals(input: 0, cacheCreate: 0, cacheRead: 0, output: 0,
+                         peakInput: 0, peakCC: 0, peakCR: 0, peakOutput: 0, cost: 0)
         for tally in tallies {
-            t.input += tally.input; t.cc += tally.cacheCreate
-            t.cr += tally.cacheRead; t.output += tally.output
-            let m: Int64 = tally.isPeak ? 2 : 1
-            t.peakInput += tally.input * m; t.peakCC += tally.cacheCreate * m
-            t.peakCR += tally.cacheRead * m; t.peakOutput += tally.output * m
-            t.cost += tokenCost(
+            acc.input += tally.input; acc.cacheCreate += tally.cacheCreate
+            acc.cacheRead += tally.cacheRead; acc.output += tally.output
+            let multiplier: Int64 = tally.isPeak ? 2 : 1
+            acc.peakInput += tally.input * multiplier; acc.peakCC += tally.cacheCreate * multiplier
+            acc.peakCR += tally.cacheRead * multiplier; acc.peakOutput += tally.output * multiplier
+            acc.cost += tokenCost(
                 model: tally.model, input: tally.input,
                 cacheCreate: tally.cacheCreate, cacheRead: tally.cacheRead, output: tally.output
             )
         }
-        return t
+        return acc
     }
 }
