@@ -142,12 +142,14 @@ final class ClaudeContextMeterTests: XCTestCase {
 
     // MARK: - ModelLimits
 
-    /// Registers teardown cleanup for a ModelLimits test sessionId so keys are always
-    /// removed even if an assertion throws mid-test.
+    /// Registers teardown cleanup for a ModelLimits test sessionId so the entry is
+    /// always removed from the opusSessionLimits dict even if an assertion throws mid-test.
     private func registerModelLimitsTeardown(sessionId: String) {
         addTeardownBlock {
-            UserDefaults.standard.removeObject(forKey: "sessionLimit_\(sessionId)")
-            UserDefaults.standard.removeObject(forKey: "sessionLimitDate_\(sessionId)")
+            var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+                as? [String: Date] ?? [:]
+            limits.removeValue(forKey: sessionId)
+            UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
         }
     }
 
@@ -180,7 +182,8 @@ final class ClaudeContextMeterTests: XCTestCase {
             observedTokens: 250_000
         )
         XCTAssertEqual(result, 1_000_000)
-        XCTAssertTrue(UserDefaults.standard.bool(forKey: "sessionLimit_test-ml-over"))
+        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
+        XCTAssertNotNil(limits?["test-ml-over"], "Session should be recorded in opusSessionLimits dict")
     }
 
     func testOpus47PostCompactionRetains1MLimitAfterTokensDrop() {
@@ -230,8 +233,8 @@ final class ClaudeContextMeterTests: XCTestCase {
             observedTokens: 999_999
         )
         XCTAssertEqual(result, 200_000)
-        XCTAssertFalse(UserDefaults.standard.bool(forKey: "sessionLimit_"),
-                       "Empty sessionId must not write a sessionLimit_ key")
+        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
+        XCTAssertNil(limits?[""], "Empty sessionId must not be written to opusSessionLimits dict")
     }
 
     func testStaleSessionLimitKeyIsPrunedAfter30Days() {
@@ -248,8 +251,10 @@ final class ClaudeContextMeterTests: XCTestCase {
         }
 
         let staleDate = Date().addingTimeInterval(-31 * 24 * 60 * 60)
-        UserDefaults.standard.set(true,      forKey: "sessionLimit_\(staleSessionId)")
-        UserDefaults.standard.set(staleDate, forKey: "sessionLimitDate_\(staleSessionId)")
+        var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+            as? [String: Date] ?? [:]
+        limits[staleSessionId] = staleDate
+        UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
 
         // Trigger pruning via any contextWindow() call on Opus 4.7
         _ = ModelLimits.contextWindow(
@@ -258,10 +263,9 @@ final class ClaudeContextMeterTests: XCTestCase {
             observedTokens: 0
         )
 
-        XCTAssertNil(UserDefaults.standard.object(forKey: "sessionLimit_\(staleSessionId)"),
-                     "Stale sessionLimit key should have been pruned")
-        XCTAssertNil(UserDefaults.standard.object(forKey: "sessionLimitDate_\(staleSessionId)"),
-                     "Stale sessionLimitDate key should have been pruned")
+        let remaining = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+            as? [String: Date]
+        XCTAssertNil(remaining?[staleSessionId], "Stale entry should have been pruned from opusSessionLimits")
     }
 
     // MARK: - JSONLParser
