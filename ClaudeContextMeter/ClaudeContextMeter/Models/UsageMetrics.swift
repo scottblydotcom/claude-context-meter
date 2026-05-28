@@ -30,11 +30,6 @@ struct WeeklyUsageMetrics {
     let noCacheRead: Int64
     /// input + output only
     let inputOutputOnly: Int64
-    /// allTokens with 2× multiplier applied to tokens from peak-hour requests
-    /// (Mon–Fri 5–11 AM PT), matching Anthropic's peak-usage billing behavior.
-    let peakAdjustedTokens: Int64
-    /// API-equivalent cost in USD, weighted by per-model token pricing.
-    let costWeighted: Double
     let windowStart: Date
     let nextReset: Date
 

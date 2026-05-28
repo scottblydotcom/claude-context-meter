@@ -142,14 +142,130 @@ final class ClaudeContextMeterTests: XCTestCase {
 
     // MARK: - ModelLimits
 
-    func testKnownClaudeModelsReturn200k() {
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-sonnet-4-6"), 200_000)
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-opus-4-6"), 200_000)
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-haiku-4-5"), 200_000)
+    /// Registers teardown cleanup for a ModelLimits test sessionId so the entry is
+    /// always removed from the opusSessionLimits dict even if an assertion throws mid-test.
+    private func registerModelLimitsTeardown(sessionId: String) {
+        addTeardownBlock {
+            var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+                as? [String: Date] ?? [:]
+            limits.removeValue(forKey: sessionId)
+            UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
+        }
     }
 
-    func testUnknownModelReturnsDefault() {
-        XCTAssertEqual(ModelLimits.contextWindow(for: "gpt-4"), 200_000)
+    func testOpus47Under200kReturns200kLimit() {
+        registerModelLimitsTeardown(sessionId: "test-ml-under")
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-under",
+            observedTokens: 150_000
+        )
+        XCTAssertEqual(result, 200_000)
+    }
+
+    func testOpus47AtExactly200kReturns200kLimit() {
+        // Exactly at the boundary returns 200k — the session hasn't exceeded the limit yet.
+        registerModelLimitsTeardown(sessionId: "test-ml-exact")
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-exact",
+            observedTokens: 200_000
+        )
+        XCTAssertEqual(result, 200_000)
+    }
+
+    func testOpus47Over200kReturns1MAndPersistsInUserDefaults() {
+        registerModelLimitsTeardown(sessionId: "test-ml-over")
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-over",
+            observedTokens: 250_000
+        )
+        XCTAssertEqual(result, 1_000_000)
+        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
+        XCTAssertNotNil(limits?["test-ml-over"], "Session should be recorded in opusSessionLimits dict")
+    }
+
+    func testOpus47PostCompactionRetains1MLimitAfterTokensDrop() {
+        registerModelLimitsTeardown(sessionId: "test-ml-compact")
+        // First call: 250k tokens — establishes 1M limit in UserDefaults
+        _ = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-compact",
+            observedTokens: 250_000
+        )
+        // Second call: 40k tokens (post-compaction) — must still return 1M from persisted value
+        let postCompaction = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-compact",
+            observedTokens: 40_000
+        )
+        XCTAssertEqual(postCompaction, 1_000_000)
+    }
+
+    func testNonOpusModelOver200kStillReturns200k() {
+        registerModelLimitsTeardown(sessionId: "test-ml-sonnet")
+        // Only claude-opus-4-7 can ever be 1M; Sonnet cannot
+        let result = ModelLimits.contextWindow(
+            for: "claude-sonnet-4-6",
+            sessionId: "test-ml-sonnet",
+            observedTokens: 999_999
+        )
+        XCTAssertEqual(result, 200_000)
+    }
+
+    func testUnknownModelReturns200k() {
+        registerModelLimitsTeardown(sessionId: "test-ml-unknown")
+        let result = ModelLimits.contextWindow(
+            for: "claude-future-model-xyz",
+            sessionId: "test-ml-unknown",
+            observedTokens: 0
+        )
+        XCTAssertEqual(result, 200_000)
+    }
+
+    func testEmptySessionIdReturns200kAndWritesNoUserDefaultsKeys() {
+        // An empty sessionId from malformed JSONL must not write to UserDefaults —
+        // doing so would create a shared collision key across all empty-sessionId sessions.
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "",
+            observedTokens: 999_999
+        )
+        XCTAssertEqual(result, 200_000)
+        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
+        XCTAssertNil(limits?[""], "Empty sessionId must not be written to opusSessionLimits dict")
+    }
+
+    func testStaleSessionLimitKeyIsPrunedAfter30Days() {
+        // Seed a stale entry (31 days old) and verify pruneStaleEntries removes it
+        // when contextWindow() is next called for any Opus 4.7 session.
+        let staleSessionId = "test-ml-stale"
+        let triggerSessionId = "test-ml-prune-trigger"
+        registerModelLimitsTeardown(sessionId: staleSessionId)
+        registerModelLimitsTeardown(sessionId: triggerSessionId)
+        // Clear the 24h throttle key so pruning fires unconditionally in this test.
+        UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
+        }
+
+        let staleDate = Date().addingTimeInterval(-31 * 24 * 60 * 60)
+        var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+            as? [String: Date] ?? [:]
+        limits[staleSessionId] = staleDate
+        UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
+
+        // Trigger pruning via any contextWindow() call on Opus 4.7
+        _ = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: triggerSessionId,
+            observedTokens: 0
+        )
+
+        let remaining = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
+            as? [String: Date]
+        XCTAssertNil(remaining?[staleSessionId], "Stale entry should have been pruned from opusSessionLimits")
     }
 
     // MARK: - JSONLParser
@@ -500,52 +616,4 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertNil(start)
     }
 
-    // MARK: - WeeklyUsageCalculator.isPeakHour
-
-    private func ptDate(weekday: Int, hour: Int, minute: Int = 0) -> Date {
-        // weekday: 1=Sun, 2=Mon … 7=Sat (Calendar convention)
-        var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "America/Los_Angeles")!
-        // Find a recent date matching the target weekday.
-        var comps = cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: Date())
-        comps.weekday = weekday
-        comps.hour = hour; comps.minute = minute; comps.second = 0
-        return cal.nextDate(after: Date().addingTimeInterval(-8 * 24 * 3600),
-                            matching: comps, matchingPolicy: .nextTime)!
-    }
-
-    func testPeakHourMidMorningWeekday() {
-        // Tuesday 8 AM PT — squarely in peak
-        XCTAssertTrue(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 3, hour: 8)))
-    }
-
-    func testPeakHourBoundaryStartInclusive() {
-        // Monday 5:00 AM PT — exactly at start, should be peak
-        XCTAssertTrue(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 2, hour: 5, minute: 0)))
-    }
-
-    func testPeakHourBoundaryEndExclusive() {
-        // Friday 11:00 AM PT — exactly at end, should NOT be peak
-        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 6, hour: 11, minute: 0)))
-    }
-
-    func testPeakHourBefore5AM() {
-        // Wednesday 4:59 AM PT — before peak window
-        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 4, hour: 4, minute: 59)))
-    }
-
-    func testPeakHourAfternoonWeekday() {
-        // Thursday 2 PM PT — after peak window
-        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 5, hour: 14)))
-    }
-
-    func testPeakHourSaturdayDuringPeakWindow() {
-        // Saturday 8 AM PT — peak time slot but weekend, should NOT be peak
-        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 7, hour: 8)))
-    }
-
-    func testPeakHourSundayDuringPeakWindow() {
-        // Sunday 9 AM PT — peak time slot but weekend, should NOT be peak
-        XCTAssertFalse(WeeklyUsageCalculator.isPeakHour(ptDate(weekday: 1, hour: 9)))
-    }
 }
