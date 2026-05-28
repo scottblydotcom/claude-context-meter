@@ -37,7 +37,6 @@ struct WeeklyUsageSection: View {
         }
         .font(.caption)
     }
-
 }
 
 #Preview {

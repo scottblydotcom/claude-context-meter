@@ -142,18 +142,38 @@ final class ClaudeContextMeterTests: XCTestCase {
 
     // MARK: - ModelLimits
 
+    /// Registers teardown cleanup for a ModelLimits test sessionId so keys are always
+    /// removed even if an assertion throws mid-test.
+    private func registerModelLimitsTeardown(sessionId: String) {
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: "sessionLimit_\(sessionId)")
+            UserDefaults.standard.removeObject(forKey: "sessionLimitDate_\(sessionId)")
+        }
+    }
+
     func testOpus47Under200kReturns200kLimit() {
+        registerModelLimitsTeardown(sessionId: "test-ml-under")
         let result = ModelLimits.contextWindow(
             for: "claude-opus-4-7",
             sessionId: "test-ml-under",
             observedTokens: 150_000
         )
         XCTAssertEqual(result, 200_000)
-        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-under")
-        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-under")
+    }
+
+    func testOpus47AtExactly200kReturns200kLimit() {
+        // Exactly at the boundary returns 200k — the session hasn't exceeded the limit yet.
+        registerModelLimitsTeardown(sessionId: "test-ml-exact")
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-exact",
+            observedTokens: 200_000
+        )
+        XCTAssertEqual(result, 200_000)
     }
 
     func testOpus47Over200kReturns1MAndPersistsInUserDefaults() {
+        registerModelLimitsTeardown(sessionId: "test-ml-over")
         let result = ModelLimits.contextWindow(
             for: "claude-opus-4-7",
             sessionId: "test-ml-over",
@@ -161,11 +181,10 @@ final class ClaudeContextMeterTests: XCTestCase {
         )
         XCTAssertEqual(result, 1_000_000)
         XCTAssertTrue(UserDefaults.standard.bool(forKey: "sessionLimit_test-ml-over"))
-        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-over")
-        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-over")
     }
 
     func testOpus47PostCompactionRetains1MLimitAfterTokensDrop() {
+        registerModelLimitsTeardown(sessionId: "test-ml-compact")
         // First call: 250k tokens — establishes 1M limit in UserDefaults
         _ = ModelLimits.contextWindow(
             for: "claude-opus-4-7",
@@ -179,11 +198,10 @@ final class ClaudeContextMeterTests: XCTestCase {
             observedTokens: 40_000
         )
         XCTAssertEqual(postCompaction, 1_000_000)
-        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-compact")
-        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-compact")
     }
 
     func testNonOpusModelOver200kStillReturns200k() {
+        registerModelLimitsTeardown(sessionId: "test-ml-sonnet")
         // Only claude-opus-4-7 can ever be 1M; Sonnet cannot
         let result = ModelLimits.contextWindow(
             for: "claude-sonnet-4-6",
@@ -191,19 +209,41 @@ final class ClaudeContextMeterTests: XCTestCase {
             observedTokens: 999_999
         )
         XCTAssertEqual(result, 200_000)
-        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-sonnet")
-        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-sonnet")
     }
 
     func testUnknownModelReturns200k() {
+        registerModelLimitsTeardown(sessionId: "test-ml-unknown")
         let result = ModelLimits.contextWindow(
             for: "claude-future-model-xyz",
             sessionId: "test-ml-unknown",
             observedTokens: 0
         )
         XCTAssertEqual(result, 200_000)
-        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-unknown")
-        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-unknown")
+    }
+
+    func testStaleSessionLimitKeyIsPrunedAfter30Days() {
+        // Seed a stale entry (31 days old) and verify pruneStaleEntries removes it
+        // when contextWindow() is next called for any Opus 4.7 session.
+        let staleSessionId = "test-ml-stale"
+        let triggerSessionId = "test-ml-prune-trigger"
+        registerModelLimitsTeardown(sessionId: staleSessionId)
+        registerModelLimitsTeardown(sessionId: triggerSessionId)
+
+        let staleDate = Date().addingTimeInterval(-31 * 24 * 60 * 60)
+        UserDefaults.standard.set(true,      forKey: "sessionLimit_\(staleSessionId)")
+        UserDefaults.standard.set(staleDate, forKey: "sessionLimitDate_\(staleSessionId)")
+
+        // Trigger pruning via any contextWindow() call on Opus 4.7
+        _ = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: triggerSessionId,
+            observedTokens: 0
+        )
+
+        XCTAssertNil(UserDefaults.standard.object(forKey: "sessionLimit_\(staleSessionId)"),
+                     "Stale sessionLimit key should have been pruned")
+        XCTAssertNil(UserDefaults.standard.object(forKey: "sessionLimitDate_\(staleSessionId)"),
+                     "Stale sessionLimitDate key should have been pruned")
     }
 
     // MARK: - JSONLParser

@@ -20,6 +20,14 @@ enum ModelLimits {
     /// Detection is reactive: once `observedTokens` exceeds 200k for a given session,
     /// the 1M limit is persisted in UserDefaults so it survives autocompaction resets.
     /// UserDefaults keys older than 30 days are pruned on each call.
+    ///
+    /// **Boundary:** `observedTokens == 200_000` returns `defaultContextWindow` (200k).
+    /// The threshold is `> 200_000` — a session exactly at the 200k limit has not yet
+    /// exceeded it, so the 200k denominator is correct.
+    ///
+    /// **nil sessionId:** callers must guard against a nil sessionId and skip this
+    /// function rather than coalescing to a shared sentinel, to avoid cross-session
+    /// key collisions in UserDefaults.
     static func contextWindow(for model: String, sessionId: String, observedTokens: Int64) -> Int64 {
         guard model == extendedContextModel else { return defaultContextWindow }
 
@@ -27,6 +35,9 @@ enum ModelLimits {
         let dateKey  = "sessionLimitDate_\(sessionId)"
         let defaults = UserDefaults.standard
 
+        // Prune eagerly on each call. The number of sessionLimitDate_ keys is bounded
+        // by Opus 4.7 sessions in the past 30 days (typically single digits), so the
+        // full UserDefaults snapshot is cheap and throttling is not necessary.
         pruneStaleEntries(defaults: defaults)
 
         // Already confirmed as 1M in a prior call — honour across compaction

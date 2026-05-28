@@ -25,7 +25,21 @@ enum ContextWindowCalculator {
               let usage = last.message?.usage,
               let model = last.message?.model else { return nil }
 
-        let sessionId = last.sessionId ?? "unknown"
+        // A nil sessionId means the JSONL record is malformed. Skip 1M detection entirely
+        // rather than coalescing to a shared "unknown" key, which would let one 1M session
+        // permanently mark all future nil-sessionId Opus 4.7 sessions as 1M.
+        guard let sessionId = last.sessionId else {
+            let limit = ModelLimits.defaultContextWindow
+            return ContextWindowMetrics(
+                fileName: url.lastPathComponent,
+                model: model,
+                totalTokens: usage.totalTokens,
+                contextLimit: limit,
+                inputTokens: usage.inputTokens,
+                cacheReadTokens: usage.cacheReadInputTokens ?? 0,
+                outputTokens: usage.outputTokens
+            )
+        }
         let limit = ModelLimits.contextWindow(
             for: model,
             sessionId: sessionId,
