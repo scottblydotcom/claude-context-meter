@@ -221,6 +221,19 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(result, 200_000)
     }
 
+    func testEmptySessionIdReturns200kAndWritesNoUserDefaultsKeys() {
+        // An empty sessionId from malformed JSONL must not write to UserDefaults —
+        // doing so would create a shared collision key across all empty-sessionId sessions.
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "",
+            observedTokens: 999_999
+        )
+        XCTAssertEqual(result, 200_000)
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: "sessionLimit_"),
+                       "Empty sessionId must not write a sessionLimit_ key")
+    }
+
     func testStaleSessionLimitKeyIsPrunedAfter30Days() {
         // Seed a stale entry (31 days old) and verify pruneStaleEntries removes it
         // when contextWindow() is next called for any Opus 4.7 session.

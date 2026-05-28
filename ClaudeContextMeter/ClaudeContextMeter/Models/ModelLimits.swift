@@ -34,7 +34,7 @@ enum ModelLimits {
     /// function rather than coalescing to a shared sentinel, to avoid cross-session
     /// key collisions in UserDefaults.
     static func contextWindow(for model: String, sessionId: String, observedTokens: Int64) -> Int64 {
-        guard model == extendedContextModel else { return defaultContextWindow }
+        guard model == extendedContextModel, !sessionId.isEmpty else { return defaultContextWindow }
 
         let limitKey = "sessionLimit_\(sessionId)"
         let dateKey  = "sessionLimitDate_\(sessionId)"
