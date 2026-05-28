@@ -228,6 +228,11 @@ final class ClaudeContextMeterTests: XCTestCase {
         let triggerSessionId = "test-ml-prune-trigger"
         registerModelLimitsTeardown(sessionId: staleSessionId)
         registerModelLimitsTeardown(sessionId: triggerSessionId)
+        // Clear the 24h throttle key so pruning fires unconditionally in this test.
+        UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
+        addTeardownBlock {
+            UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
+        }
 
         let staleDate = Date().addingTimeInterval(-31 * 24 * 60 * 60)
         UserDefaults.standard.set(true,      forKey: "sessionLimit_\(staleSessionId)")

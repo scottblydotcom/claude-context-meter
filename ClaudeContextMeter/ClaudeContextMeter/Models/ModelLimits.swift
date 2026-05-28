@@ -14,12 +14,17 @@ enum ModelLimits {
     /// Only Opus 4.7 can use the extended 1M context window.
     private static let extendedContextModel = "claude-opus-4-7"
 
+    /// UserDefaults key tracking when we last ran the 30-day stale-entry prune.
+    static let lastPruneDateKey = "sessionLimitsLastPruneDate"
+
     /// Returns the context window limit for a session.
     ///
     /// Both Opus 4.7 variants (200k and 1M) report the same model string in JSONL.
     /// Detection is reactive: once `observedTokens` exceeds 200k for a given session,
     /// the 1M limit is persisted in UserDefaults so it survives autocompaction resets.
-    /// UserDefaults keys older than 30 days are pruned on each call.
+    /// Stale entries (>30 days) are pruned at most once every 24 hours — throttled
+    /// because `dictionaryRepresentation()` copies the entire merged UserDefaults
+    /// hierarchy and this function is called on every FSEvent and 30s heartbeat.
     ///
     /// **Boundary:** `observedTokens == 200_000` returns `defaultContextWindow` (200k).
     /// The threshold is `> 200_000` — a session exactly at the 200k limit has not yet
@@ -35,10 +40,7 @@ enum ModelLimits {
         let dateKey  = "sessionLimitDate_\(sessionId)"
         let defaults = UserDefaults.standard
 
-        // Prune eagerly on each call. The number of sessionLimitDate_ keys is bounded
-        // by Opus 4.7 sessions in the past 30 days (typically single digits), so the
-        // full UserDefaults snapshot is cheap and throttling is not necessary.
-        pruneStaleEntries(defaults: defaults)
+        pruneStaleEntriesIfNeeded(defaults: defaults)
 
         // Already confirmed as 1M in a prior call — honour across compaction
         if defaults.bool(forKey: limitKey) {
@@ -57,8 +59,16 @@ enum ModelLimits {
 
     // MARK: - Private
 
-    private static func pruneStaleEntries(defaults: UserDefaults) {
-        let cutoff = Date().addingTimeInterval(-30 * 24 * 60 * 60)
+    /// Runs the 30-day stale-entry prune at most once every 24 hours.
+    private static func pruneStaleEntriesIfNeeded(defaults: UserDefaults) {
+        let now = Date()
+        if let lastPrune = defaults.object(forKey: lastPruneDateKey) as? Date,
+           now.timeIntervalSince(lastPrune) < 24 * 60 * 60 {
+            return
+        }
+        defaults.set(now, forKey: lastPruneDateKey)
+
+        let cutoff = now.addingTimeInterval(-30 * 24 * 60 * 60)
         for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("sessionLimitDate_") {
             if let date = defaults.object(forKey: key) as? Date, date < cutoff {
                 let sessionSuffix = String(key.dropFirst("sessionLimitDate_".count))
