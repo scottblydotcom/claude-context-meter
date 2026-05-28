@@ -25,7 +25,12 @@ enum ContextWindowCalculator {
               let usage = last.message?.usage,
               let model = last.message?.model else { return nil }
 
-        let limit = ModelLimits.contextWindow(for: model)
+        let sessionId = last.sessionId ?? "unknown"
+        let limit = ModelLimits.contextWindow(
+            for: model,
+            sessionId: sessionId,
+            observedTokens: usage.totalTokens
+        )
 
         return ContextWindowMetrics(
             fileName: url.lastPathComponent,

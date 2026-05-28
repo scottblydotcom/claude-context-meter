@@ -142,14 +142,68 @@ final class ClaudeContextMeterTests: XCTestCase {
 
     // MARK: - ModelLimits
 
-    func testKnownClaudeModelsReturn200k() {
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-sonnet-4-6"), 200_000)
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-opus-4-6"), 200_000)
-        XCTAssertEqual(ModelLimits.contextWindow(for: "claude-haiku-4-5"), 200_000)
+    func testOpus47Under200kReturns200kLimit() {
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-under",
+            observedTokens: 150_000
+        )
+        XCTAssertEqual(result, 200_000)
+        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-under")
+        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-under")
     }
 
-    func testUnknownModelReturnsDefault() {
-        XCTAssertEqual(ModelLimits.contextWindow(for: "gpt-4"), 200_000)
+    func testOpus47Over200kReturns1MAndPersistsInUserDefaults() {
+        let result = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-over",
+            observedTokens: 250_000
+        )
+        XCTAssertEqual(result, 1_000_000)
+        XCTAssertTrue(UserDefaults.standard.bool(forKey: "sessionLimit_test-ml-over"))
+        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-over")
+        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-over")
+    }
+
+    func testOpus47PostCompactionRetains1MLimitAfterTokensDrop() {
+        // First call: 250k tokens — establishes 1M limit in UserDefaults
+        _ = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-compact",
+            observedTokens: 250_000
+        )
+        // Second call: 40k tokens (post-compaction) — must still return 1M from persisted value
+        let postCompaction = ModelLimits.contextWindow(
+            for: "claude-opus-4-7",
+            sessionId: "test-ml-compact",
+            observedTokens: 40_000
+        )
+        XCTAssertEqual(postCompaction, 1_000_000)
+        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-compact")
+        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-compact")
+    }
+
+    func testNonOpusModelOver200kStillReturns200k() {
+        // Only claude-opus-4-7 can ever be 1M; Sonnet cannot
+        let result = ModelLimits.contextWindow(
+            for: "claude-sonnet-4-6",
+            sessionId: "test-ml-sonnet",
+            observedTokens: 999_999
+        )
+        XCTAssertEqual(result, 200_000)
+        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-sonnet")
+        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-sonnet")
+    }
+
+    func testUnknownModelReturns200k() {
+        let result = ModelLimits.contextWindow(
+            for: "claude-future-model-xyz",
+            sessionId: "test-ml-unknown",
+            observedTokens: 0
+        )
+        XCTAssertEqual(result, 200_000)
+        UserDefaults.standard.removeObject(forKey: "sessionLimit_test-ml-unknown")
+        UserDefaults.standard.removeObject(forKey: "sessionLimitDate_test-ml-unknown")
     }
 
     // MARK: - JSONLParser
