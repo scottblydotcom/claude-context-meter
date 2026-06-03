@@ -60,10 +60,13 @@ git checkout -b recover/<topic> reviewed-<topic>-<date>
 
 ### From the off-GitHub mirror
 ```
-# On the backup host
+# Inspect what the mirror has retained (including refs deleted from origin)
 git -C ~/backups/<repo>/repo.git log --all --oneline | head -20
-# Verify refs are retained even after remote deletion:
 git -C ~/backups/<repo>/repo.git branch -a
+
+# Pull a lost branch from the mirror back into your local clone
+git fetch ~/backups/<repo>/repo.git refs/heads/<branch>:recover/<branch>
+git checkout recover/<branch>
 ```
 
 ### From a bundle snapshot
@@ -72,6 +75,7 @@ git -C ~/backups/<repo>/repo.git branch -a
 git bundle list-heads ~/backups/<repo>/bundles/snap-<stamp>.bundle
 # Fetch a specific ref from the bundle
 git fetch ~/backups/<repo>/bundles/snap-<stamp>.bundle refs/heads/main:recover/main-from-bundle
+git checkout recover/main-from-bundle
 ```
 
 ### From dangling objects (last resort)

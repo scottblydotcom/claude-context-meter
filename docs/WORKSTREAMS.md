@@ -8,12 +8,17 @@ Update this file in the same commit that creates or closes a branch.
 | Branch | PR | Protective Tag | Notes |
 |---|---|---|---|
 | main | — | — | Protected default branch |
-| feature/weekly-gauge | n/a | — | Open draft PR before next push |
-| ci/harden-pipeline-add-gemini-config | n/a | — | Open draft PR before next push |
-| feature/v1.2-reposition | n/a | — | Remote-only orphan; verify or prune |
+| fix/billing-window-allsessions | #4 | — | Energy fix: billing window file filter |
+| docs/git-governance | #5 | — | This PR — governance runbook + workstreams |
 
 ## Closed / Merged Branches
 _(moved here when PR reads "Merged")_
+
+| Branch | PR | Notes |
+|---|---|---|
+| ci/harden-pipeline-add-gemini-config | #1 | Merged 2026-04-08 |
+| feature/weekly-gauge | #2 | Merged 2026-04-15 |
+| feature/v1.2-reposition | #3 | Merged 2026-05-28 |
 
 ## Discipline Rules
 1. Open a DRAFT PR the moment a feature branch is first pushed. PRs retain head commits even if the branch is later deleted.
