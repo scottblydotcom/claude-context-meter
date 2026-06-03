@@ -54,10 +54,9 @@ git checkout recover/<branch-name>
 
 ### From a milestone tag
 ```
-git fetch origin refs/tags/reviewed-<topic>-<date>:refs/tags/reviewed-<topic>-<date>
+git fetch origin tag reviewed-<topic>-<date>
 git checkout -b recover/<topic> reviewed-<topic>-<date>
 ```
-Note: the explicit destination refspec is required to populate the local tag; without it, fetch only writes to FETCH_HEAD.
 
 ### From the off-GitHub mirror
 ```
@@ -79,5 +78,5 @@ git fetch ~/backups/<repo>/bundles/snap-<stamp>.bundle refs/heads/main:recover/m
 ```
 git fsck --lost-found
 # Check .git/lost-found/commit/ for dangling commits
-git log --all <sha>
+git show <sha>
 ```
