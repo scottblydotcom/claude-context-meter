@@ -78,6 +78,10 @@ enum BillingWindowCalculator {
         var earliestTimestamp: [String: Date] = [:]
         var outputTokensByRequestId: [String: Int64] = [:]
 
+        // Use the same lookback horizon as the record-level guard below (timestamp >= lookback)
+        // so no file whose content could influence window-start detection is skipped.
+        // IMPORTANT: if you widen/narrow the lookback interval, update both this call
+        // and the guard inside the loop together — they must stay in sync.
         for url in JSONLParser.allSessionFiles(modifiedSince: lookback) {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
