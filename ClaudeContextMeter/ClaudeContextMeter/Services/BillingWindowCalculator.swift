@@ -82,7 +82,13 @@ enum BillingWindowCalculator {
         // so no file whose content could influence window-start detection is skipped.
         // IMPORTANT: if you widen/narrow the lookback interval, update both this call
         // and the guard inside the loop together — they must stay in sync.
-        for url in JSONLParser.allSessionFiles(modifiedSince: lookback) {
+        //
+        // The 15-minute buffer guards against clock drift: the filesystem modification
+        // date is set by the local clock, but record timestamps come from the server.
+        // If the local clock runs slightly slow, a file could be filtered out here even
+        // though its records fall within the lookback window.
+        let fileModifiedSince = lookback.addingTimeInterval(-15 * 60)
+        for url in JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince) {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
                 guard record.type == "assistant" || record.type == "user",
