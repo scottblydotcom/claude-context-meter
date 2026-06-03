@@ -48,16 +48,16 @@
 
 ### From a PR head (branch deleted but PR exists)
 ```
-git fetch origin pull/<PR-NUMBER>/head:recover/<branch-name>
+git fetch origin refs/pull/<PR-NUMBER>/head:recover/<branch-name>
 git checkout recover/<branch-name>
 ```
 
 ### From a milestone tag
 ```
-git fetch origin tag reviewed-<topic>-<date>
+git fetch origin refs/tags/reviewed-<topic>-<date>:refs/tags/reviewed-<topic>-<date>
 git checkout -b recover/<topic> reviewed-<topic>-<date>
 ```
-Note: the `tag` keyword is required — a bare refs/tags/x fetch only populates FETCH_HEAD.
+Note: the explicit destination refspec is required to populate the local tag; without it, fetch only writes to FETCH_HEAD.
 
 ### From the off-GitHub mirror
 ```
