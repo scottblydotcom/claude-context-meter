@@ -83,11 +83,12 @@ enum BillingWindowCalculator {
         // IMPORTANT: if you widen/narrow the lookback interval, update both this call
         // and the guard inside the loop together — they must stay in sync.
         //
-        // The 15-minute buffer guards against clock drift: the filesystem modification
-        // date is set by the local clock, but record timestamps come from the server.
-        // If the local clock runs slightly slow, a file could be filtered out here even
-        // though its records fall within the lookback window.
-        let fileModifiedSince = lookback.addingTimeInterval(-15 * 60)
+        // The 1-hour buffer guards against clock drift and NTP resync: the filesystem
+        // modification date is set by the local clock, but record timestamps come from
+        // the server. If the local clock was significantly out of sync when a file was
+        // written but has since corrected, the modification timestamp could be well over
+        // 15 minutes stale. 1 hour costs negligible extra I/O against a 10-hour window.
+        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
         for url in JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince) {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
