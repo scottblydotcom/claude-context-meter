@@ -78,7 +78,7 @@ enum BillingWindowCalculator {
         var earliestTimestamp: [String: Date] = [:]
         var outputTokensByRequestId: [String: Int64] = [:]
 
-        for url in JSONLParser.allSessionFiles() {
+        for url in JSONLParser.allSessionFiles(modifiedSince: lookback) {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
                 guard record.type == "assistant" || record.type == "user",
