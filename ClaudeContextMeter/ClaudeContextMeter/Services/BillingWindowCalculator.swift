@@ -78,7 +78,18 @@ enum BillingWindowCalculator {
         var earliestTimestamp: [String: Date] = [:]
         var outputTokensByRequestId: [String: Int64] = [:]
 
-        for url in JSONLParser.allSessionFiles() {
+        // Use the same lookback horizon as the record-level guard below (timestamp >= lookback)
+        // so no file whose content could influence window-start detection is skipped.
+        // IMPORTANT: if you widen/narrow the lookback interval, update both this call
+        // and the guard inside the loop together — they must stay in sync.
+        //
+        // The 1-hour buffer guards against clock drift and NTP resync: the filesystem
+        // modification date is set by the local clock, but record timestamps come from
+        // the server. If the local clock was significantly out of sync when a file was
+        // written but has since corrected, the modification timestamp could be well over
+        // 15 minutes stale. 1 hour costs negligible extra I/O against a 10-hour window.
+        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
+        for url in JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince) {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
                 guard record.type == "assistant" || record.type == "user",
