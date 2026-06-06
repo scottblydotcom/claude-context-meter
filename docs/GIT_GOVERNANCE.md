@@ -6,10 +6,10 @@
 - PRs required; no human approval required (solo project — CI is the gate)
 - enforce_admins: true — admin cannot bypass
 - Required checks: all four security scan jobs must pass
-  - Security Scan / Gitleaks — Secret Detection
-  - Security Scan / Semgrep — Static Analysis
-  - Security Scan / Trivy — Vulnerability Scan
-  - Security Scan / SwiftLint — Swift Style & Lint
+  - Gitleaks — Secret Detection
+  - Semgrep — Static Analysis
+  - Trivy — Vulnerability Scan
+  - SwiftLint — Swift Style & Lint
 - allow_force_pushes: false
 - allow_deletions: false
 - delete_branch_on_merge: true (merge-only — branches deleted on close are NOT auto-deleted)
@@ -40,7 +40,7 @@
 4. **Update WORKSTREAMS.md** in the same commit that creates or closes a branch.
 
 ## Security Gates (every PR)
-- All four Security Scan jobs are required checks — a failing scan cannot merge.
+- All four required checks must pass — a failing check cannot merge.
 - Run `./scripts/scan.sh` locally before pushing to catch issues early.
 - GuardDog on dependency changes; gitleaks/ggshield before touching secrets or config.
 
