@@ -40,7 +40,7 @@
 4. **Update WORKSTREAMS.md** in the same commit that creates or closes a branch.
 
 ## Security Gates (every PR)
-- All four required checks must pass — a failing scan cannot merge.
+- All four required checks must pass — a failing check cannot merge.
 - Run `./scripts/scan.sh` locally before pushing to catch issues early.
 - GuardDog on dependency changes; gitleaks/ggshield before touching secrets or config.
 
