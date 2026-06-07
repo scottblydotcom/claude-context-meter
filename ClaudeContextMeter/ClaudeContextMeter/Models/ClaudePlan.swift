@@ -6,6 +6,8 @@
 import Foundation
 
 enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
+    static let planKey = "selectedPlan"
+
     case pro    = "pro"
     case max5x  = "max5x"
     case max20x = "max20x"
@@ -29,7 +31,7 @@ enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     }
 
     static var current: ClaudePlan {
-        guard let raw = UserDefaults.standard.string(forKey: "selectedPlan"),
+        guard let raw = UserDefaults.standard.string(forKey: ClaudePlan.planKey),
               let plan = ClaudePlan(rawValue: raw) else {
             return .pro
         }
@@ -37,7 +39,7 @@ enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     }
 
     func save() {
-        UserDefaults.standard.set(rawValue, forKey: "selectedPlan")
+        UserDefaults.standard.set(rawValue, forKey: ClaudePlan.planKey)
         UserDefaults.standard.set(Int(tokenLimit), forKey: BillingWindowCalculator.limitKey)
     }
 }

@@ -772,8 +772,8 @@ final class ClaudePlanTests: XCTestCase {
 
     override func tearDown() {
         super.tearDown()
-        UserDefaults.standard.removeObject(forKey: "selectedPlan")
-        UserDefaults.standard.removeObject(forKey: "billingTokenLimit")
+        UserDefaults.standard.removeObject(forKey: ClaudePlan.planKey)
+        UserDefaults.standard.removeObject(forKey: BillingWindowCalculator.limitKey)
     }
 
     func testProLabelAndLimit() {
@@ -812,13 +812,13 @@ final class ClaudePlanTests: XCTestCase {
 
     func testSaveWritesBothKeys() {
         ClaudePlan.max5x.save()
-        XCTAssertEqual(UserDefaults.standard.string(forKey: "selectedPlan"), "max5x")
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: "billingTokenLimit"), 655_000)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: ClaudePlan.planKey), "max5x")
+        XCTAssertEqual(UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey), 655_000)
     }
 
     func testSaveMax20xWritesCorrectLimit() {
         ClaudePlan.max20x.save()
-        XCTAssertEqual(UserDefaults.standard.string(forKey: "selectedPlan"), "max20x")
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: "billingTokenLimit"), 2_620_000)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: ClaudePlan.planKey), "max20x")
+        XCTAssertEqual(UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey), 2_620_000)
     }
 }
