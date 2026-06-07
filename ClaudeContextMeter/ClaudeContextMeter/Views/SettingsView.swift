@@ -76,7 +76,8 @@ struct SettingsView: View {
     }
 
     private func commitTokenLimit() {
-        guard let value = Int(tokenLimitText), value > 1_000 else {
+        let trimmed = tokenLimitText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Int(trimmed), value > 1_000 else {
             tokenLimitText = "\(tokenLimit)"   // revert to last valid value
             return
         }
