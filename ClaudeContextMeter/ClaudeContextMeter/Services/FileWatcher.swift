@@ -43,7 +43,7 @@ final class FileWatcher {
             paths as CFArray,
             FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
             1.0,  // 1-second debounce
-            FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
+            FSEventStreamCreateFlags(kFSEventStreamCreateFlagUseCFTypes)
         )
 
         if let stream {
