@@ -10,7 +10,14 @@ struct SettingsView: View {
     @AppStorage(ClaudePlan.planKey) private var selectedPlanRaw: String = ClaudePlan.pro.rawValue
     @AppStorage(BillingWindowCalculator.limitKey) private var tokenLimit: Int = Int(ClaudePlan.pro.tokenLimit)
     @State private var launchAtLogin: Bool = (SMAppService.mainApp.status == .enabled)
-    @State private var tokenLimitText: String = ""
+    @State private var tokenLimitText: String
+    @FocusState private var tokenFieldFocused: Bool
+
+    init() {
+        let stored = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+        let effective = stored > 0 ? stored : Int(ClaudePlan.pro.tokenLimit)
+        _tokenLimitText = State(initialValue: "\(effective)")
+    }
 
     var body: some View {
         Form {
@@ -23,15 +30,18 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .onChange(of: selectedPlanRaw) { _, newRaw in
                     if let plan = ClaudePlan(rawValue: newRaw) {
-                        tokenLimit = Int(plan.tokenLimit)
+                        tokenLimit = Int(clamping: plan.tokenLimit)
                         tokenLimitText = "\(tokenLimit)"
                     }
                 }
 
                 HStack {
                     TextField("Token limit", text: $tokenLimitText)
-                        .onAppear { tokenLimitText = "\(tokenLimit)" }
+                        .focused($tokenFieldFocused)
                         .onSubmit { commitTokenLimit() }
+                        .onChange(of: tokenFieldFocused) { _, focused in
+                            if !focused { commitTokenLimit() }
+                        }
                     Text("tokens")
                         .foregroundStyle(.secondary)
                 }
@@ -56,6 +66,9 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear {
+            launchAtLogin = (SMAppService.mainApp.status == .enabled)
+        }
         .frame(width: 360, height: 240)
     }
 
