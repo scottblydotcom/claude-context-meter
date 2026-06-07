@@ -10,3 +10,4 @@ build/
 
 # macOS
 .DS_Store
+.worktrees/
