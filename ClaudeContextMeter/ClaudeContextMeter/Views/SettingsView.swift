@@ -30,8 +30,9 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .onChange(of: selectedPlanRaw) { _, newRaw in
                     if let plan = ClaudePlan(rawValue: newRaw) {
-                        tokenLimit = Int(clamping: plan.tokenLimit)
-                        tokenLimitText = "\(tokenLimit)"
+                        let newLimit = Int(clamping: plan.tokenLimit)
+                        tokenLimit = newLimit
+                        tokenLimitText = "\(newLimit)"
                     }
                 }
 

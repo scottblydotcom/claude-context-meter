@@ -38,8 +38,11 @@ enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
         return plan
     }
 
+    /// Writes this plan's preset token limit and plan key to UserDefaults.
+    /// Not called by SettingsView (which drives both keys via @AppStorage directly);
+    /// available for programmatic use and covered by unit tests.
     func save() {
         UserDefaults.standard.set(rawValue, forKey: ClaudePlan.planKey)
-        UserDefaults.standard.set(Int(tokenLimit), forKey: BillingWindowCalculator.limitKey)
+        UserDefaults.standard.set(Int(clamping: tokenLimit), forKey: BillingWindowCalculator.limitKey)
     }
 }
