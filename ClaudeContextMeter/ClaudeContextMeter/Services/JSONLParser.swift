@@ -9,6 +9,12 @@ import Foundation
 
 enum JSONLParser {
 
+    struct SessionScan {
+        let mostRecent: URL?
+        let billingFiles: [URL]
+        let weeklyFiles: [URL]
+    }
+
     /// Parses a JSONL file and returns all decodable SessionRecords.
     static func parse(fileURL: URL) throws -> [SessionRecord] {
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
@@ -76,5 +82,40 @@ enum JSONLParser {
         }
 
         return best?.url
+    }
+
+    /// Scans all JSONL files in the projects directory and returns a `SessionScan` containing:
+    /// - mostRecent: URL of the most recently modified non-subagent file
+    /// - billingFiles: files modified within the last 11 hours
+    /// - weeklyFiles: files modified within the current weekly window
+    static func scanAllFiles(
+        relativeTo now: Date,
+        projectsDir: URL? = nil
+    ) -> SessionScan {
+        let dir = projectsDir ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects")
+        guard let enumerator = FileManager.default.enumerator(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return SessionScan(mostRecent: nil, billingFiles: [], weeklyFiles: []) }
+        let billingCutoff = now.addingTimeInterval(-11 * 3600)
+        let weeklyCutoff = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        var mostRecent: (url: URL, date: Date)?
+        var billingFiles: [URL] = []
+        var weeklyFiles: [URL] = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "jsonl",
+                  let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let mdate = values.contentModificationDate else { continue }
+            if mdate >= billingCutoff { billingFiles.append(url) }
+            if mdate >= weeklyCutoff { weeklyFiles.append(url) }
+            if !url.path.contains("/subagents/") {
+                if mostRecent == nil || mdate > mostRecent!.date {
+                    mostRecent = (url, mdate)
+                }
+            }
+        }
+        return SessionScan(mostRecent: mostRecent?.url, billingFiles: billingFiles, weeklyFiles: weeklyFiles)
     }
 }

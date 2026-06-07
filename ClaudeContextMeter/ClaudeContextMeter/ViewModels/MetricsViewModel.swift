@@ -14,6 +14,7 @@ class MetricsViewModel: ObservableObject {
 
     nonisolated(unsafe) private var fileWatcher: FileWatcher?
     nonisolated(unsafe) private var heartbeat: Timer?
+    private let coordinator = RefreshCoordinator()
 
     init() {
         refresh()
@@ -21,9 +22,12 @@ class MetricsViewModel: ObservableObject {
     }
 
     func refresh() {
-        context = ContextWindowCalculator.calculate()
-        billing = BillingWindowCalculator.calculate()
-        weekly  = WeeklyUsageCalculator.calculate()
+        Task {
+            guard let result = await coordinator.refresh() else { return }
+            self.context = result.context
+            self.billing = result.billing
+            self.weekly  = result.weekly
+        }
     }
 
     private func startWatching() {
@@ -36,10 +40,10 @@ class MetricsViewModel: ObservableObject {
         }
         fileWatcher?.start()
 
-        // 30-second heartbeat as fallback in case FSEvents misses an event
-        heartbeat = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+        // 60-second heartbeat as failsafe in case FSEvents misses an event.
+        // FSEvents handles live updates; this is a backstop only.
+        heartbeat = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
         }
     }
-
 }

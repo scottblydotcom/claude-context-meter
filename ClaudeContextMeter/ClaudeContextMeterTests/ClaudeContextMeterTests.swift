@@ -490,6 +490,22 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(start!.timeIntervalSince1970, topOfHour.timeIntervalSince1970, accuracy: 1.0)
     }
 
+    func testBillingCalculateFilesEmptyReturnsZeroTokens() {
+        let result = BillingWindowCalculator.calculate(files: [])
+        XCTAssertEqual(result.outputTokens, 0)
+    }
+
+    func testBillingCalculateFilesMatchesCalculateNoArg() {
+        let now = Date()
+        let lookback = now.addingTimeInterval(-10 * 3600)
+        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
+        let files = JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince)
+        let fromFiles = BillingWindowCalculator.calculate(files: files)
+        let fromNoArg = BillingWindowCalculator.calculate()
+        XCTAssertEqual(fromFiles.outputTokens, fromNoArg.outputTokens)
+        XCTAssertEqual(fromFiles.tokenLimit,   fromNoArg.tokenLimit)
+    }
+
     // MARK: - WeeklyUsageCalculator window start
 
     func testWeeklyWindowStartOnResetDayAfterResetHour() {
@@ -614,6 +630,138 @@ final class ClaudeContextMeterTests: XCTestCase {
         let ts = [now.addingTimeInterval(-6 * 3600)]  // 6h ago — window expired
         let start = BillingWindowCalculator.findWindowStart(from: ts, relativeTo: now)
         XCTAssertNil(start)
+    }
+
+    func testWeeklyCalculateFilesEmptyReturnsZeroTokens() {
+        let result = WeeklyUsageCalculator.calculate(files: [])
+        XCTAssertEqual(result.allTokens, 0)
+        XCTAssertEqual(result.noCacheRead, 0)
+        XCTAssertEqual(result.inputOutputOnly, 0)
+    }
+
+    func testWeeklyCalculateFilesMatchesCalculateNoArg() {
+        let windowStart = WeeklyUsageCalculator.findWeeklyWindowStart()
+        let files = JSONLParser.allSessionFiles(modifiedSince: windowStart)
+        let fromFiles = WeeklyUsageCalculator.calculate(files: files)
+        let fromNoArg = WeeklyUsageCalculator.calculate()
+        XCTAssertEqual(fromFiles.allTokens,       fromNoArg.allTokens)
+        XCTAssertEqual(fromFiles.noCacheRead,     fromNoArg.noCacheRead)
+        XCTAssertEqual(fromFiles.inputOutputOnly, fromNoArg.inputOutputOnly)
+    }
+
+    // MARK: - ContextWindowCalculator.calculate(mostRecentFile:)
+
+    func testContextCalculateMostRecentFileNilReturnsNil() {
+        let result = ContextWindowCalculator.calculate(mostRecentFile: nil)
+        XCTAssertNil(result)
+    }
+
+    func testContextCalculateMostRecentFileMatchesCalculateNoArg() throws {
+        // Call calculate(mostRecentFile:) twice with the same URL to verify idempotency.
+        // Comparing to the no-arg overload would race: a live session can produce a newer
+        // file between the two calls, causing them to return different results.
+        guard let url = JSONLParser.mostRecentSessionFile() else {
+            throw XCTSkip("No session files available — skipping live-file test")
+        }
+        let a = ContextWindowCalculator.calculate(mostRecentFile: url)
+        let b = ContextWindowCalculator.calculate(mostRecentFile: url)
+        XCTAssertEqual(a?.totalTokens,  b?.totalTokens)
+        XCTAssertEqual(a?.contextLimit, b?.contextLimit)
+    }
+
+    // MARK: - JSONLParser.scanAllFiles
+
+    func testScanAllFilesOnEmptyDirectoryReturnsNilAndEmpty() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_empty_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertNil(result.mostRecent)
+        XCTAssertTrue(result.billingFiles.isEmpty)
+        XCTAssertTrue(result.weeklyFiles.isEmpty)
+    }
+
+    func testScanAllFilesIgnoresNonJsonlFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_nojsonl_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let txtFile = tempDir.appendingPathComponent("session.txt")
+        try "data".write(to: txtFile, atomically: true, encoding: .utf8)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertNil(result.mostRecent)
+        XCTAssertTrue(result.billingFiles.isEmpty)
+    }
+
+    func testScanAllFilesMostRecentExcludesSubagents() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_subagent_\(ProcessInfo.processInfo.globallyUniqueString)")
+        let subagentDir = tempDir.appendingPathComponent("subagents")
+        try FileManager.default.createDirectory(at: subagentDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let mainFile = tempDir.appendingPathComponent("main.jsonl")
+        let subagentFile = subagentDir.appendingPathComponent("sub.jsonl")
+        try "{}".write(to: mainFile, atomically: true, encoding: .utf8)
+        try "{}".write(to: subagentFile, atomically: true, encoding: .utf8)
+
+        let future = Date().addingTimeInterval(3600)
+        try FileManager.default.setAttributes([.modificationDate: future], ofItemAtPath: subagentFile.path)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertEqual(result.mostRecent?.lastPathComponent, "main.jsonl",
+                       "mostRecent must never be a file inside a subagents/ directory")
+    }
+
+    func testScanAllFilesBillingCutoffIs11Hours() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_billing_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let now = Date()
+        let recent = tempDir.appendingPathComponent("recent.jsonl")
+        let old    = tempDir.appendingPathComponent("old.jsonl")
+        try "{}".write(to: recent, atomically: true, encoding: .utf8)
+        try "{}".write(to: old,    atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-10 * 3600)],
+                                              ofItemAtPath: recent.path)
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-12 * 3600)],
+                                              ofItemAtPath: old.path)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: now, projectsDir: tempDir)
+        let billingNames = result.billingFiles.map(\.lastPathComponent)
+        XCTAssertTrue(billingNames.contains("recent.jsonl"),
+                      "File modified 10h ago should be inside the 11h billing window")
+        XCTAssertFalse(billingNames.contains("old.jsonl"),
+                       "File modified 12h ago should be outside the 11h billing window")
+    }
+
+    // MARK: - RefreshCoordinator
+
+    func testCoordinatorFirstCallReturnsResult() async {
+        let coordinator = RefreshCoordinator()
+        let result = await coordinator.refresh()
+        XCTAssertNotNil(result, "First call should never be debounced")
+    }
+
+    func testCoordinatorImmediateSecondCallIsDebounced() async {
+        let coordinator = RefreshCoordinator()
+        _ = await coordinator.refresh()           // first call — runs
+        let second = await coordinator.refresh()  // immediate second call — debounced
+        XCTAssertNil(second, "Call within minimumInterval should return nil (debounced)")
+    }
+
+    func testCoordinatorCallAfterIntervalIsNotDebounced() async throws {
+        let coordinator = RefreshCoordinator(minimumInterval: 0.01)
+        _ = await coordinator.refresh()
+        try await Task.sleep(nanoseconds: 20_000_000)  // 20ms > 10ms interval
+        let second = await coordinator.refresh()
+        XCTAssertNotNil(second, "Call after minimumInterval should not be debounced")
     }
 
 }

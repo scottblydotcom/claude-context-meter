@@ -60,36 +60,19 @@ enum BillingWindowCalculator {
         }
     }
 
-    /// Scans JSONL files, derives the rolling window start from record timestamps,
-    /// and sums output tokens in the current window.
-    static func calculate() -> BillingWindowMetrics {
+    /// Core calculation: accepts a pre-built file list (avoids redundant directory scans
+    /// when called from RefreshCoordinator).
+    static func calculate(files: [URL]) -> BillingWindowMetrics {
         let now = Date()
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        // Look back 10h: enough to find window boundaries (window is 5h, so
-        // a boundary record could sit just outside the 5h mark).
         let lookback = now.addingTimeInterval(-10 * 3600)
 
-        // earliestTimestamp: tracks the earliest timestamp seen for each requestId
-        // across ALL assistant records (including streaming partials). Streaming
-        // partials are timestamped at request start, before the response finishes,
-        // so they give us a more accurate window-start anchor than complete records.
         var earliestTimestamp: [String: Date] = [:]
         var outputTokensByRequestId: [String: Int64] = [:]
 
-        // Use the same lookback horizon as the record-level guard below (timestamp >= lookback)
-        // so no file whose content could influence window-start detection is skipped.
-        // IMPORTANT: if you widen/narrow the lookback interval, update both this call
-        // and the guard inside the loop together — they must stay in sync.
-        //
-        // The 1-hour buffer guards against clock drift and NTP resync: the filesystem
-        // modification date is set by the local clock, but record timestamps come from
-        // the server. If the local clock was significantly out of sync when a file was
-        // written but has since corrected, the modification timestamp could be well over
-        // 15 minutes stale. 1 hour costs negligible extra I/O against a 10-hour window.
-        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
-        for url in JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince) {
+        for url in files {
             guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in parsed {
                 guard record.type == "assistant" || record.type == "user",
@@ -98,14 +81,12 @@ enum BillingWindowCalculator {
                       timestamp >= lookback
                 else { continue }
 
-                // Keep the earliest timestamp for this requestId.
                 if let existing = earliestTimestamp[rid] {
                     if timestamp < existing { earliestTimestamp[rid] = timestamp }
                 } else {
                     earliestTimestamp[rid] = timestamp
                 }
 
-                // Collect output tokens from complete records only.
                 if record.isCompleteAssistantRecord,
                    let outputTokens = record.message?.usage?.outputTokens {
                     outputTokensByRequestId[rid] = outputTokens
@@ -113,7 +94,6 @@ enum BillingWindowCalculator {
             }
         }
 
-        // Build records using earliest timestamps, only for requestIds with output tokens.
         var records: [(timestamp: Date, outputTokens: Int64)] = []
         for (rid, outputTokens) in outputTokensByRequestId {
             guard let timestamp = earliestTimestamp[rid] else { continue }
@@ -123,7 +103,6 @@ enum BillingWindowCalculator {
 
         let timestamps = records.map { $0.timestamp }
         guard let windowStart = findWindowStart(from: timestamps, relativeTo: now) else {
-            // No active window detected — no recent JSONL data.
             return BillingWindowMetrics(outputTokens: 0, tokenLimit: tokenLimit,
                                         windowStart: now, nextReset: now.addingTimeInterval(windowDuration))
         }
@@ -139,5 +118,17 @@ enum BillingWindowCalculator {
             windowStart: windowStart,
             nextReset: nextReset
         )
+    }
+
+    /// Convenience wrapper: scans files using the standard 11h lookback, then delegates
+    /// to calculate(files:). Use calculate(files:) directly from RefreshCoordinator.
+    ///
+    /// IMPORTANT: if you widen/narrow the lookback interval here, update the record-level
+    /// `timestamp >= lookback` guard inside calculate(files:) together — they must stay in sync.
+    static func calculate() -> BillingWindowMetrics {
+        let now = Date()
+        let lookback = now.addingTimeInterval(-10 * 3600)
+        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
+        return calculate(files: JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince))
     }
 }
