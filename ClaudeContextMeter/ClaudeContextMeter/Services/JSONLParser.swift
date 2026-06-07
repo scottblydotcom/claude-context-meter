@@ -105,12 +105,12 @@ enum JSONLParser {
         var billingFiles: [URL] = []
         var weeklyFiles: [URL] = []
         for case let url as URL in enumerator {
-            guard url.pathExtension == "jsonl" else { continue }
-            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
-            let mdate = values?.contentModificationDate ?? .distantPast
+            guard url.pathExtension == "jsonl",
+                  let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]),
+                  let mdate = values.contentModificationDate else { continue }
             if mdate >= billingCutoff { billingFiles.append(url) }
             if mdate >= weeklyCutoff { weeklyFiles.append(url) }
-            if !url.pathComponents.contains("subagents") {
+            if !url.path.contains("/subagents/") {
                 if mostRecent == nil || mdate > mostRecent!.date {
                     mostRecent = (url, mdate)
                 }
