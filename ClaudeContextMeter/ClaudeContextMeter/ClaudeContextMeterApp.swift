@@ -33,5 +33,9 @@ struct ClaudeContextMeterApp: App {
             )
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+        }
     }
 }

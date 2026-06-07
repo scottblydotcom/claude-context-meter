@@ -4,11 +4,9 @@
 //
 
 import SwiftUI
-import ServiceManagement
 
 struct PopoverContentView: View {
     @EnvironmentObject private var viewModel: MetricsViewModel
-    @State private var launchAtLogin: Bool = (SMAppService.mainApp.status == .enabled)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -62,21 +60,14 @@ struct PopoverContentView: View {
 
             // Footer
             HStack {
-                Toggle("Launch at Login", isOn: $launchAtLogin)
-                    .font(.caption)
-                    .toggleStyle(.checkbox)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        do {
-                            if enabled {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Revert toggle if registration fails
-                            launchAtLogin = (SMAppService.mainApp.status == .enabled)
-                        }
-                    }
+                Button {
+                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("Settings")
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
