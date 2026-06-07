@@ -61,6 +61,9 @@ struct PopoverContentView: View {
             // Footer
             HStack {
                 Button {
+                    // "showSettingsWindow:" is a private AppKit action registered by
+                    // SwiftUI's Settings scene; stable since macOS 13. No public API
+                    // equivalent exists for menu-bar-only apps.
                     NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
                 } label: {
                     Image(systemName: "gearshape")
