@@ -7,13 +7,12 @@ import Foundation
 
 enum ContextWindowCalculator {
 
-    /// Finds the most recent session file, parses it, and returns context window metrics.
-    /// Returns nil if no complete assistant record can be found.
-    static func calculate() -> ContextWindowMetrics? {
-        guard let url = JSONLParser.mostRecentSessionFile() else { return nil }
+    /// Core calculation: accepts the most-recent session file URL (avoids redundant
+    /// directory scans when called from RefreshCoordinator).
+    static func calculate(mostRecentFile: URL?) -> ContextWindowMetrics? {
+        guard let url = mostRecentFile else { return nil }
         guard let records = try? JSONLParser.parse(fileURL: url) else { return nil }
 
-        // Deduplicate by requestId, keep only complete assistant records
         var seen = Set<String>()
         let complete = records.filter { record in
             guard record.isCompleteAssistantRecord,
@@ -55,5 +54,11 @@ enum ContextWindowCalculator {
             cacheReadTokens: usage.cacheReadInputTokens ?? 0,
             outputTokens: usage.outputTokens
         )
+    }
+
+    /// Convenience wrapper: finds the most recent session file, then delegates to
+    /// calculate(mostRecentFile:).
+    static func calculate() -> ContextWindowMetrics? {
+        calculate(mostRecentFile: JSONLParser.mostRecentSessionFile())
     }
 }

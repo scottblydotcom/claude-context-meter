@@ -58,9 +58,8 @@ enum WeeklyUsageCalculator {
         var input, cacheCreate, cacheRead, output: Int64
     }
 
-    /// Scans all JSONL files and sums tokens since the start of the current weekly window,
-    /// returning counts for three token-counting methods.
-    static func calculate() -> WeeklyUsageMetrics {
+    /// Core calculation: accepts a pre-built file list.
+    static func calculate(files: [URL]) -> WeeklyUsageMetrics {
         let now         = Date()
         let windowStart = findWeeklyWindowStart(relativeTo: now)
         let nextReset   = Calendar.current.date(byAdding: .day, value: 7, to: windowStart)!
@@ -68,10 +67,9 @@ enum WeeklyUsageCalculator {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
-        // Deduplicate by requestId; keep only complete records within the window.
         var byRequest: [String: Tally] = [:]
 
-        for url in JSONLParser.allSessionFiles(modifiedSince: windowStart) {
+        for url in files {
             guard let records = try? JSONLParser.parse(fileURL: url) else { continue }
             for record in records {
                 guard record.isCompleteAssistantRecord,
@@ -98,6 +96,13 @@ enum WeeklyUsageCalculator {
             windowStart: windowStart,
             nextReset: nextReset
         )
+    }
+
+    /// Convenience wrapper: scans files since the current weekly window start.
+    static func calculate() -> WeeklyUsageMetrics {
+        let windowStart = findWeeklyWindowStart()
+        let files = JSONLParser.allSessionFiles(modifiedSince: windowStart)
+        return calculate(files: files)
     }
 
     private struct Totals {

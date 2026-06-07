@@ -490,6 +490,22 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(start!.timeIntervalSince1970, topOfHour.timeIntervalSince1970, accuracy: 1.0)
     }
 
+    func testBillingCalculateFilesEmptyReturnsZeroTokens() {
+        let result = BillingWindowCalculator.calculate(files: [])
+        XCTAssertEqual(result.outputTokens, 0)
+    }
+
+    func testBillingCalculateFilesMatchesCalculateNoArg() {
+        let now = Date()
+        let lookback = now.addingTimeInterval(-10 * 3600)
+        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
+        let files = JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince)
+        let fromFiles = BillingWindowCalculator.calculate(files: files)
+        let fromNoArg = BillingWindowCalculator.calculate()
+        XCTAssertEqual(fromFiles.outputTokens, fromNoArg.outputTokens)
+        XCTAssertEqual(fromFiles.tokenLimit,   fromNoArg.tokenLimit)
+    }
+
     // MARK: - WeeklyUsageCalculator window start
 
     func testWeeklyWindowStartOnResetDayAfterResetHour() {
@@ -614,6 +630,43 @@ final class ClaudeContextMeterTests: XCTestCase {
         let ts = [now.addingTimeInterval(-6 * 3600)]  // 6h ago — window expired
         let start = BillingWindowCalculator.findWindowStart(from: ts, relativeTo: now)
         XCTAssertNil(start)
+    }
+
+    func testWeeklyCalculateFilesEmptyReturnsZeroTokens() {
+        let result = WeeklyUsageCalculator.calculate(files: [])
+        XCTAssertEqual(result.allTokens, 0)
+        XCTAssertEqual(result.noCacheRead, 0)
+        XCTAssertEqual(result.inputOutputOnly, 0)
+    }
+
+    func testWeeklyCalculateFilesMatchesCalculateNoArg() {
+        let windowStart = WeeklyUsageCalculator.findWeeklyWindowStart()
+        let files = JSONLParser.allSessionFiles(modifiedSince: windowStart)
+        let fromFiles = WeeklyUsageCalculator.calculate(files: files)
+        let fromNoArg = WeeklyUsageCalculator.calculate()
+        XCTAssertEqual(fromFiles.allTokens,       fromNoArg.allTokens)
+        XCTAssertEqual(fromFiles.noCacheRead,     fromNoArg.noCacheRead)
+        XCTAssertEqual(fromFiles.inputOutputOnly, fromNoArg.inputOutputOnly)
+    }
+
+    // MARK: - ContextWindowCalculator.calculate(mostRecentFile:)
+
+    func testContextCalculateMostRecentFileNilReturnsNil() {
+        let result = ContextWindowCalculator.calculate(mostRecentFile: nil)
+        XCTAssertNil(result)
+    }
+
+    func testContextCalculateMostRecentFileMatchesCalculateNoArg() throws {
+        // Call calculate(mostRecentFile:) twice with the same URL to verify idempotency.
+        // Comparing to the no-arg overload would race: a live session can produce a newer
+        // file between the two calls, causing them to return different results.
+        guard let url = JSONLParser.mostRecentSessionFile() else {
+            throw XCTSkip("No session files available — skipping live-file test")
+        }
+        let a = ContextWindowCalculator.calculate(mostRecentFile: url)
+        let b = ContextWindowCalculator.calculate(mostRecentFile: url)
+        XCTAssertEqual(a?.totalTokens,  b?.totalTokens)
+        XCTAssertEqual(a?.contextLimit, b?.contextLimit)
     }
 
     // MARK: - JSONLParser.scanAllFiles
