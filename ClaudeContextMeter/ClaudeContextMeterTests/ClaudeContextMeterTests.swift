@@ -741,4 +741,27 @@ final class ClaudeContextMeterTests: XCTestCase {
                        "File modified 12h ago should be outside the 11h billing window")
     }
 
+    // MARK: - RefreshCoordinator
+
+    func testCoordinatorFirstCallReturnsResult() async {
+        let coordinator = RefreshCoordinator()
+        let result = await coordinator.refresh()
+        XCTAssertNotNil(result, "First call should never be debounced")
+    }
+
+    func testCoordinatorImmediateSecondCallIsDebounced() async {
+        let coordinator = RefreshCoordinator()
+        _ = await coordinator.refresh()           // first call — runs
+        let second = await coordinator.refresh()  // immediate second call — debounced
+        XCTAssertNil(second, "Call within minimumInterval should return nil (debounced)")
+    }
+
+    func testCoordinatorCallAfterIntervalIsNotDebounced() async throws {
+        let coordinator = RefreshCoordinator(minimumInterval: 0.01)
+        _ = await coordinator.refresh()
+        try await Task.sleep(nanoseconds: 20_000_000)  // 20ms > 10ms interval
+        let second = await coordinator.refresh()
+        XCTAssertNotNil(second, "Call after minimumInterval should not be debounced")
+    }
+
 }
