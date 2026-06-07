@@ -77,4 +77,39 @@ enum JSONLParser {
 
         return best?.url
     }
+
+    /// Scans all JSONL files in the projects directory and returns:
+    /// - mostRecent: URL of the most recently modified non-subagent file
+    /// - billingFiles: files modified within the last 11 hours
+    /// - weeklyFiles: files modified within the current weekly window
+    static func scanAllFiles(
+        relativeTo now: Date,
+        projectsDir: URL? = nil
+    ) -> (mostRecent: URL?, billingFiles: [URL], weeklyFiles: [URL]) {
+        let dir = projectsDir ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects")
+        guard let enumerator = FileManager.default.enumerator(
+            at: dir,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return (nil, [], []) }
+        let billingCutoff = now.addingTimeInterval(-11 * 3600)
+        let weeklyCutoff  = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        var mostRecent: (url: URL, date: Date)?
+        var billingFiles: [URL] = []
+        var weeklyFiles: [URL]  = []
+        for case let url as URL in enumerator {
+            guard url.pathExtension == "jsonl" else { continue }
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            let mdate  = values?.contentModificationDate ?? .distantPast
+            if mdate >= billingCutoff { billingFiles.append(url) }
+            if mdate >= weeklyCutoff  { weeklyFiles.append(url) }
+            if !url.pathComponents.contains("subagents") {
+                if mostRecent == nil || mdate > mostRecent!.date {
+                    mostRecent = (url, mdate)
+                }
+            }
+        }
+        return (mostRecent?.url, billingFiles, weeklyFiles)
+    }
 }

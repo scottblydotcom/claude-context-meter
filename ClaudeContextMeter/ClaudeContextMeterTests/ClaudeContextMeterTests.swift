@@ -616,4 +616,76 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertNil(start)
     }
 
+    // MARK: - JSONLParser.scanAllFiles
+
+    func testScanAllFilesOnEmptyDirectoryReturnsNilAndEmpty() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_empty_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertNil(result.mostRecent)
+        XCTAssertTrue(result.billingFiles.isEmpty)
+        XCTAssertTrue(result.weeklyFiles.isEmpty)
+    }
+
+    func testScanAllFilesIgnoresNonJsonlFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_nojsonl_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let txtFile = tempDir.appendingPathComponent("session.txt")
+        try "data".write(to: txtFile, atomically: true, encoding: .utf8)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertNil(result.mostRecent)
+        XCTAssertTrue(result.billingFiles.isEmpty)
+    }
+
+    func testScanAllFilesMostRecentExcludesSubagents() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_subagent_\(ProcessInfo.processInfo.globallyUniqueString)")
+        let subagentDir = tempDir.appendingPathComponent("subagents")
+        try FileManager.default.createDirectory(at: subagentDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let mainFile = tempDir.appendingPathComponent("main.jsonl")
+        let subagentFile = subagentDir.appendingPathComponent("sub.jsonl")
+        try "{}".write(to: mainFile, atomically: true, encoding: .utf8)
+        try "{}".write(to: subagentFile, atomically: true, encoding: .utf8)
+
+        let future = Date().addingTimeInterval(3600)
+        try FileManager.default.setAttributes([.modificationDate: future], ofItemAtPath: subagentFile.path)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: Date(), projectsDir: tempDir)
+        XCTAssertEqual(result.mostRecent?.lastPathComponent, "main.jsonl",
+                       "mostRecent must never be a file inside a subagents/ directory")
+    }
+
+    func testScanAllFilesBillingCutoffIs11Hours() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scan_billing_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let now = Date()
+        let recent = tempDir.appendingPathComponent("recent.jsonl")
+        let old    = tempDir.appendingPathComponent("old.jsonl")
+        try "{}".write(to: recent, atomically: true, encoding: .utf8)
+        try "{}".write(to: old,    atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-10 * 3600)],
+                                              ofItemAtPath: recent.path)
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-12 * 3600)],
+                                              ofItemAtPath: old.path)
+
+        let result = JSONLParser.scanAllFiles(relativeTo: now, projectsDir: tempDir)
+        let billingNames = result.billingFiles.map(\.lastPathComponent)
+        XCTAssertTrue(billingNames.contains("recent.jsonl"),
+                      "File modified 10h ago should be inside the 11h billing window")
+        XCTAssertFalse(billingNames.contains("old.jsonl"),
+                       "File modified 12h ago should be outside the 11h billing window")
+    }
+
 }
