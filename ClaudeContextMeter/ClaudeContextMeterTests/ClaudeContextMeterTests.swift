@@ -796,17 +796,17 @@ final class ClaudePlanTests: XCTestCase {
     }
 
     func testCurrentDefaultsToProWhenNothingStored() {
-        UserDefaults.standard.removeObject(forKey: "selectedPlan")
+        UserDefaults.standard.removeObject(forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .pro)
     }
 
     func testCurrentReadsStoredPlan() {
-        UserDefaults.standard.set("max5x", forKey: "selectedPlan")
+        UserDefaults.standard.set("max5x", forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .max5x)
     }
 
     func testCurrentFallsBackToProForUnknownRaw() {
-        UserDefaults.standard.set("enterprise", forKey: "selectedPlan")
+        UserDefaults.standard.set("enterprise", forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .pro)
     }
 
