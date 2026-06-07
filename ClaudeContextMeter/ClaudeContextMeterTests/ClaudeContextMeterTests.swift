@@ -765,3 +765,60 @@ final class ClaudeContextMeterTests: XCTestCase {
     }
 
 }
+
+// MARK: - ClaudePlan
+
+final class ClaudePlanTests: XCTestCase {
+
+    override func tearDown() {
+        super.tearDown()
+        UserDefaults.standard.removeObject(forKey: "selectedPlan")
+        UserDefaults.standard.removeObject(forKey: "billingTokenLimit")
+    }
+
+    func testProLabelAndLimit() {
+        XCTAssertEqual(ClaudePlan.pro.label, "Pro")
+        XCTAssertEqual(ClaudePlan.pro.tokenLimit, 131_000)
+    }
+
+    func testMax5xLabelAndLimit() {
+        XCTAssertEqual(ClaudePlan.max5x.label, "Max 5x")
+        XCTAssertEqual(ClaudePlan.max5x.tokenLimit, 655_000)
+    }
+
+    func testMax20xLabelAndLimit() {
+        XCTAssertEqual(ClaudePlan.max20x.label, "Max 20x")
+        XCTAssertEqual(ClaudePlan.max20x.tokenLimit, 2_620_000)
+    }
+
+    func testAllCasesHasThreePlans() {
+        XCTAssertEqual(ClaudePlan.allCases.count, 3)
+    }
+
+    func testCurrentDefaultsToProWhenNothingStored() {
+        UserDefaults.standard.removeObject(forKey: "selectedPlan")
+        XCTAssertEqual(ClaudePlan.current, .pro)
+    }
+
+    func testCurrentReadsStoredPlan() {
+        UserDefaults.standard.set("max5x", forKey: "selectedPlan")
+        XCTAssertEqual(ClaudePlan.current, .max5x)
+    }
+
+    func testCurrentFallsBackToProForUnknownRaw() {
+        UserDefaults.standard.set("enterprise", forKey: "selectedPlan")
+        XCTAssertEqual(ClaudePlan.current, .pro)
+    }
+
+    func testSaveWritesBothKeys() {
+        ClaudePlan.max5x.save()
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "selectedPlan"), "max5x")
+        XCTAssertEqual(UserDefaults.standard.integer(forKey: "billingTokenLimit"), 655_000)
+    }
+
+    func testSaveMax20xWritesCorrectLimit() {
+        ClaudePlan.max20x.save()
+        XCTAssertEqual(UserDefaults.standard.string(forKey: "selectedPlan"), "max20x")
+        XCTAssertEqual(UserDefaults.standard.integer(forKey: "billingTokenLimit"), 2_620_000)
+    }
+}
