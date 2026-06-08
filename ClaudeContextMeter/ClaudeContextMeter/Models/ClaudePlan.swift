@@ -8,9 +8,9 @@ import Foundation
 enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     static let planKey = "selectedPlan"
 
-    case pro    = "pro"
-    case max5x  = "max5x"
-    case max20x = "max20x"
+    case pro
+    case max5x
+    case max20x
 
     var id: String { rawValue }
 
