@@ -16,6 +16,10 @@ struct SettingsView: View {
     init() {
         let stored = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
         let effective = stored > 0 ? stored : Int(ClaudePlan.pro.tokenLimit)
+        // Normalize a stored 0 so @AppStorage and tokenLimitText agree from the first render.
+        if stored <= 0 {
+            UserDefaults.standard.set(effective, forKey: BillingWindowCalculator.limitKey)
+        }
         _tokenLimitText = State(initialValue: "\(effective)")
     }
 
@@ -81,6 +85,7 @@ struct SettingsView: View {
             tokenLimitText = "\(tokenLimit)"   // revert to last valid value
             return
         }
+        guard value != tokenLimit else { return }  // no-op on double-fire (e.g. Return key)
         tokenLimit = value
     }
 }
