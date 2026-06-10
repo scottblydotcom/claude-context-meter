@@ -11,7 +11,8 @@ enum BillingWindowCalculator {
     static let windowDuration: TimeInterval = 5 * 3600  // 5 hours
 
     /// Default output token limit (user-configurable to match their Claude plan).
-    static let defaultLimit: Int64 = 131_000
+    /// Derived from ClaudePlan.pro so there is a single source of truth for the Pro ceiling.
+    static let defaultLimit: Int64 = ClaudePlan.pro.tokenLimit
 
     /// The current billing token limit, falls back to default.
     static var tokenLimit: Int64 {

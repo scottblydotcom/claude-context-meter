@@ -14,6 +14,7 @@ class MetricsViewModel: ObservableObject {
 
     nonisolated(unsafe) private var fileWatcher: FileWatcher?
     nonisolated(unsafe) private var heartbeat: Timer?
+    nonisolated(unsafe) private var settingsObserver: NSObjectProtocol?
     private let coordinator = RefreshCoordinator()
 
     init() {
@@ -44,6 +45,16 @@ class MetricsViewModel: ObservableObject {
         // FSEvents handles live updates; this is a backstop only.
         heartbeat = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             DispatchQueue.main.async { self?.refresh() }
+        }
+
+        // Refresh immediately when the user changes plan or token limit in Settings,
+        // so the gauge updates without waiting for the next file event or heartbeat.
+        settingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.refresh()
         }
     }
 }

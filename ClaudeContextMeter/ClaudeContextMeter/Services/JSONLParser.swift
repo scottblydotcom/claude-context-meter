@@ -15,8 +15,19 @@ enum JSONLParser {
         let weeklyFiles: [URL]
     }
 
+    /// Maximum file size accepted by parse(fileURL:). Files larger than this are skipped
+    /// to prevent unbounded memory allocation. No legitimate Claude session JSONL file
+    /// should exceed 100 MB — the context window ceiling makes it physically impossible.
+    static let maxFileSizeBytes: Int = 100 * 1024 * 1024  // 100 MB
+
     /// Parses a JSONL file and returns all decodable SessionRecords.
+    /// Returns an empty array (rather than throwing) if the file exceeds maxFileSizeBytes.
     static func parse(fileURL: URL) throws -> [SessionRecord] {
+        // CSSLP File I/O guard: skip files larger than the hard cap before loading into memory.
+        let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
+        if let size = attrs?[.size] as? Int, size > maxFileSizeBytes {
+            return []
+        }
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
         let decoder = JSONDecoder()
         var records: [SessionRecord] = []
