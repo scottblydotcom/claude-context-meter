@@ -16,10 +16,6 @@ struct SettingsView: View {
     init() {
         let stored = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
         let effective = stored > 0 ? stored : Int(ClaudePlan.pro.tokenLimit)
-        // Normalize a stored 0 so @AppStorage and tokenLimitText agree from the first render.
-        if stored <= 0 {
-            UserDefaults.standard.set(effective, forKey: BillingWindowCalculator.limitKey)
-        }
         _tokenLimitText = State(initialValue: "\(effective)")
     }
 
@@ -75,6 +71,13 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
+            // Normalize a stored 0 so @AppStorage and tokenLimitText agree.
+            // Done here rather than in init() to avoid side effects during
+            // speculative SwiftUI view instantiation.
+            let stored = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+            if stored <= 0 {
+                UserDefaults.standard.set(Int(ClaudePlan.pro.tokenLimit), forKey: BillingWindowCalculator.limitKey)
+            }
         }
         .frame(width: 360, height: 240)
     }

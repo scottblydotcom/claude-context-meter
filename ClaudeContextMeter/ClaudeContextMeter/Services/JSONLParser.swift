@@ -24,8 +24,10 @@ enum JSONLParser {
     /// Returns an empty array (rather than throwing) if the file exceeds maxFileSizeBytes.
     static func parse(fileURL: URL) throws -> [SessionRecord] {
         // CSSLP File I/O guard: skip files larger than the hard cap before loading into memory.
-        let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
-        if let size = attrs?[.size] as? Int, size > maxFileSizeBytes {
+        // Uses resourceValues(forKeys:) — consistent with the rest of this file and avoids
+        // the deprecated URL.path API on macOS 14+.
+        let sizeValues = try? fileURL.resourceValues(forKeys: [.fileSizeKey])
+        if let size = sizeValues?.fileSize, size > maxFileSizeBytes {
             return []
         }
         let contents = try String(contentsOf: fileURL, encoding: .utf8)
