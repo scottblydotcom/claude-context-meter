@@ -59,8 +59,8 @@ class MetricsViewModel: ObservableObject {
         NotificationCenter.default
             .publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
-                Task { @MainActor [weak self] in
-                    guard let self else { return }
+                Task { @MainActor in
+                    guard let self = self else { return }
                     let currentPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
                     let currentLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
                     if currentPlan != self.lastPlan || currentLimit != self.lastLimit {

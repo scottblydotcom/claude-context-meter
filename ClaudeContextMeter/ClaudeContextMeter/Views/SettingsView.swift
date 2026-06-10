@@ -81,8 +81,9 @@ struct SettingsView: View {
     }
 
     private func commitTokenLimit() {
-        let trimmed = tokenLimitText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Int(trimmed), value > 1_000 else {
+        // Strip non-digit characters so formatted input (e.g. "131,000") parses correctly.
+        let digits = tokenLimitText.filter { $0.isNumber }
+        guard let value = Int(digits), value > 1_000 else {
             tokenLimitText = "\(tokenLimit)"   // revert to last valid value
             return
         }
