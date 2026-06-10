@@ -16,6 +16,10 @@ class MetricsViewModel: ObservableObject {
     nonisolated(unsafe) private var heartbeat: Timer?
     private var cancellables = Set<AnyCancellable>()
     private let coordinator = RefreshCoordinator()
+    // Tracked on the @MainActor to avoid capturing mutable locals in an escaping closure,
+    // which is a Swift 6 strict-concurrency violation.
+    private var lastPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
+    private var lastLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
 
     init() {
         refresh()
@@ -50,18 +54,20 @@ class MetricsViewModel: ObservableObject {
         // Refresh when the user changes plan or token limit in Settings.
         // Filter to the two relevant keys to avoid spurious refreshes on every
         // unrelated UserDefaults write (e.g. other @AppStorage properties).
-        var lastPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
-        var lastLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+        // lastPlan/lastLimit are @MainActor properties — mutations are wrapped in
+        // Task { @MainActor in } to satisfy Swift 6 strict concurrency.
         NotificationCenter.default
             .publisher(for: UserDefaults.didChangeNotification)
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                let currentPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
-                let currentLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
-                if currentPlan != lastPlan || currentLimit != lastLimit {
-                    lastPlan  = currentPlan
-                    lastLimit = currentLimit
-                    self?.refresh()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    let currentPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
+                    let currentLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+                    if currentPlan != self.lastPlan || currentLimit != self.lastLimit {
+                        self.lastPlan  = currentPlan
+                        self.lastLimit = currentLimit
+                        self.refresh()
+                    }
                 }
             }
             .store(in: &cancellables)
