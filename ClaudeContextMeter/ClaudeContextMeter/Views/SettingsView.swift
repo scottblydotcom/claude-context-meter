@@ -71,13 +71,11 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
-            // Normalize a stored 0 so @AppStorage and tokenLimitText agree.
-            // Done here rather than in init() to avoid side effects during
-            // speculative SwiftUI view instantiation.
-            let stored = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
-            if stored <= 0 {
-                UserDefaults.standard.set(Int(ClaudePlan.pro.tokenLimit), forKey: BillingWindowCalculator.limitKey)
-            }
+            // Sync the text field to the current stored limit. Use the Pro default
+            // as the display fallback if stored is 0 — BillingWindowCalculator already
+            // applies the same fallback in its own calculation, so no UserDefaults write
+            // is needed (which would spuriously fire UserDefaults.didChangeNotification).
+            tokenLimitText = tokenLimit > 0 ? "\(tokenLimit)" : "\(Int(ClaudePlan.pro.tokenLimit))"
         }
         .frame(width: 360, height: 240)
     }

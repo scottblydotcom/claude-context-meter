@@ -47,12 +47,23 @@ class MetricsViewModel: ObservableObject {
             DispatchQueue.main.async { self?.refresh() }
         }
 
-        // Refresh immediately when the user changes plan or token limit in Settings,
-        // so the gauge updates without waiting for the next file event or heartbeat.
+        // Refresh when the user changes plan or token limit in Settings.
+        // Filter to the two relevant keys to avoid spurious refreshes on every
+        // unrelated UserDefaults write (e.g. other @AppStorage properties).
+        var lastPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
+        var lastLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
         NotificationCenter.default
             .publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.refresh() }
+            .sink { [weak self] _ in
+                let currentPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
+                let currentLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+                if currentPlan != lastPlan || currentLimit != lastLimit {
+                    lastPlan  = currentPlan
+                    lastLimit = currentLimit
+                    self?.refresh()
+                }
+            }
             .store(in: &cancellables)
     }
 }
