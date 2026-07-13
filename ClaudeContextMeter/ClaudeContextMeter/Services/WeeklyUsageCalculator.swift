@@ -58,8 +58,10 @@ enum WeeklyUsageCalculator {
         var input, cacheCreate, cacheRead, output: Int64
     }
 
-    /// Core calculation: accepts a pre-built file list.
-    static func calculate(files: [URL]) -> WeeklyUsageMetrics {
+    /// Core calculation: accepts pre-parsed records (avoids redundant file I/O when
+    /// called from RefreshCoordinator, which resolves records once per file across
+    /// all three calculators via JSONLParseCache).
+    static func calculate(records: [SessionRecord]) -> WeeklyUsageMetrics {
         let now         = Date()
         let windowStart = findWeeklyWindowStart(relativeTo: now)
         let nextReset   = Calendar.current.date(byAdding: .day, value: 7, to: windowStart)!
@@ -69,23 +71,20 @@ enum WeeklyUsageCalculator {
 
         var byRequest: [String: Tally] = [:]
 
-        for url in files {
-            guard let records = try? JSONLParser.parse(fileURL: url) else { continue }
-            for record in records {
-                guard record.isCompleteAssistantRecord,
-                      let rid = record.requestId,
-                      let timestamp = formatter.date(from: record.timestamp),
-                      timestamp >= windowStart, timestamp <= now,
-                      let usage = record.message?.usage
-                else { continue }
+        for record in records {
+            guard record.isCompleteAssistantRecord,
+                  let rid = record.requestId,
+                  let timestamp = formatter.date(from: record.timestamp),
+                  timestamp >= windowStart, timestamp <= now,
+                  let usage = record.message?.usage
+            else { continue }
 
-                byRequest[rid] = Tally(
-                    input: usage.inputTokens,
-                    cacheCreate: usage.cacheCreationInputTokens ?? 0,
-                    cacheRead: usage.cacheReadInputTokens ?? 0,
-                    output: usage.outputTokens
-                )
-            }
+            byRequest[rid] = Tally(
+                input: usage.inputTokens,
+                cacheCreate: usage.cacheCreationInputTokens ?? 0,
+                cacheRead: usage.cacheReadInputTokens ?? 0,
+                output: usage.outputTokens
+            )
         }
 
         let totals = accumulateTotals(byRequest.values)
@@ -96,6 +95,14 @@ enum WeeklyUsageCalculator {
             windowStart: windowStart,
             nextReset: nextReset
         )
+    }
+
+    /// Convenience wrapper: parses each file, then delegates to calculate(records:).
+    /// Prefer calculate(records:) directly when records are already available (e.g.
+    /// from RefreshCoordinator's JSONLParseCache) to avoid redundant parsing.
+    static func calculate(files: [URL]) -> WeeklyUsageMetrics {
+        let records = files.flatMap { (try? JSONLParser.parse(fileURL: $0)) ?? [] }
+        return calculate(records: records)
     }
 
     /// Convenience wrapper: scans files since the current weekly window start.
