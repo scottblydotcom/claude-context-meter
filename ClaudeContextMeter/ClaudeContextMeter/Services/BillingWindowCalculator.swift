@@ -128,7 +128,8 @@ enum BillingWindowCalculator {
     }
 
     /// Convenience wrapper: scans files using the standard 11h lookback, then delegates
-    /// to calculate(files:). Use calculate(files:) directly from RefreshCoordinator.
+    /// to calculate(files:). RefreshCoordinator uses calculate(records:) directly via
+    /// JSONLParseCache instead of calling through this wrapper.
     ///
     /// IMPORTANT: if you widen/narrow the lookback interval here, update the record-level
     /// `timestamp >= lookback` guard inside calculate(records:) together — they must stay in sync.
