@@ -7,11 +7,11 @@ import Foundation
 
 enum ContextWindowCalculator {
 
-    /// Core calculation: accepts the most-recent session file URL (avoids redundant
-    /// directory scans when called from RefreshCoordinator).
-    static func calculate(mostRecentFile: URL?) -> ContextWindowMetrics? {
+    /// Core calculation: accepts the most-recent session file URL plus its pre-parsed
+    /// records (avoids redundant file I/O when called from RefreshCoordinator, which
+    /// resolves records once per file across all three calculators via JSONLParseCache).
+    static func calculate(mostRecentFile: URL?, records: [SessionRecord]) -> ContextWindowMetrics? {
         guard let url = mostRecentFile else { return nil }
-        guard let records = try? JSONLParser.parse(fileURL: url) else { return nil }
 
         var seen = Set<String>()
         let complete = records.filter { record in
@@ -54,6 +54,15 @@ enum ContextWindowCalculator {
             cacheReadTokens: usage.cacheReadInputTokens ?? 0,
             outputTokens: usage.outputTokens
         )
+    }
+
+    /// Convenience wrapper: parses mostRecentFile, then delegates to
+    /// calculate(mostRecentFile:records:). Prefer the records: overload directly when
+    /// records are already available (e.g. from RefreshCoordinator's JSONLParseCache)
+    /// to avoid redundant parsing.
+    static func calculate(mostRecentFile: URL?) -> ContextWindowMetrics? {
+        guard let url = mostRecentFile, let records = try? JSONLParser.parse(fileURL: url) else { return nil }
+        return calculate(mostRecentFile: url, records: records)
     }
 
     /// Convenience wrapper: finds the most recent session file, then delegates to

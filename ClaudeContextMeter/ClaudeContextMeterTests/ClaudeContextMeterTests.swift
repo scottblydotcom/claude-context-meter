@@ -715,6 +715,30 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(a?.contextLimit, b?.contextLimit)
     }
 
+    func testContextCalculateRecordsMatchesCalculateMostRecentFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("context_records_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"2026-07-12T10:00:00.000Z","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let viaFile = ContextWindowCalculator.calculate(mostRecentFile: file)
+        let records = try JSONLParser.parse(fileURL: file)
+        let viaRecords = ContextWindowCalculator.calculate(mostRecentFile: file, records: records)
+
+        XCTAssertEqual(viaFile?.totalTokens, viaRecords?.totalTokens)
+        XCTAssertEqual(viaFile?.model, viaRecords?.model)
+    }
+
+    func testContextCalculateRecordsNilFileReturnsNil() {
+        XCTAssertNil(ContextWindowCalculator.calculate(mostRecentFile: nil, records: []))
+    }
+
     // MARK: - JSONLParser.scanAllFiles
 
     func testScanAllFilesOnEmptyDirectoryReturnsNilAndEmpty() throws {
