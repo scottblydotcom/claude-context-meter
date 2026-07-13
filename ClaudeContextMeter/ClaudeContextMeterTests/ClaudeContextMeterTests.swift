@@ -506,6 +506,29 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(fromFiles.tokenLimit,   fromNoArg.tokenLimit)
     }
 
+    func testBillingCalculateRecordsMatchesCalculateFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("billing_records_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"\(formatter.string(from: now))","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let viaFiles = BillingWindowCalculator.calculate(files: [file])
+        let records = try JSONLParser.parse(fileURL: file)
+        let viaRecords = BillingWindowCalculator.calculate(records: records)
+
+        XCTAssertEqual(viaFiles.outputTokens, viaRecords.outputTokens)
+        XCTAssertEqual(viaFiles.windowStart, viaRecords.windowStart)
+    }
+
     // MARK: - WeeklyUsageCalculator window start
 
     func testWeeklyWindowStartOnResetDayAfterResetHour() {
