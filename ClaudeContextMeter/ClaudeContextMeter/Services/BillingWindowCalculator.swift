@@ -131,7 +131,7 @@ enum BillingWindowCalculator {
     /// to calculate(files:). Use calculate(files:) directly from RefreshCoordinator.
     ///
     /// IMPORTANT: if you widen/narrow the lookback interval here, update the record-level
-    /// `timestamp >= lookback` guard inside calculate(files:) together — they must stay in sync.
+    /// `timestamp >= lookback` guard inside calculate(records:) together — they must stay in sync.
     static func calculate() -> BillingWindowMetrics {
         let now = Date()
         let lookback = now.addingTimeInterval(-10 * 3600)
