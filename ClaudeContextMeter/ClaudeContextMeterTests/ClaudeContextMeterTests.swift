@@ -764,6 +764,148 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertNotNil(second, "Call after minimumInterval should not be debounced")
     }
 
+    // MARK: - JSONLParseCache
+
+    func testParseCacheFirstCallInvokesParseOnce() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_first_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 1, "First call for a URL must invoke parse exactly once")
+    }
+
+    func testParseCacheUnchangedFileIsNotReparsed() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_unchanged_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 1, "Second call for an unchanged file must be a cache hit (no reparse)")
+    }
+
+    func testParseCacheChangedModificationDateReparsesFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_mtime_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(3600)],
+            ofItemAtPath: file.path
+        )
+        // URL caches resource values (mtime/size) it has already read, so re-reading the
+        // SAME URL value after mutating the file on disk would return the stale cached
+        // snapshot rather than the new state. Invalidate it to simulate what production
+        // sees: RefreshCoordinator always hands the cache freshly-enumerated URLs, which
+        // carry no stale cache.
+        file.removeAllCachedResourceValues()
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "A changed modification date must trigger a reparse")
+    }
+
+    func testParseCacheChangedSizeReparsesFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_size_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+        let fixedDate = Date()
+        try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        try "{}\n{}".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
+        // See comment in testParseCacheChangedModificationDateReparsesFile: URL caches
+        // resource values it has already read, so this must be invalidated after the
+        // on-disk mutation or the second records(for:) call will see stale size/mtime.
+        file.removeAllCachedResourceValues()
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "A changed file size (same mtime) must trigger a reparse")
+    }
+
+    func testParseCachePruneEvictsUnkeptURLs() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_prune_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        cache.prune(keeping: [])
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "Pruning a URL out of the cache must force a reparse on next access")
+    }
+
+    func testParseCacheParseFailureIsNotCached() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_failure_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            throw NSError(domain: "test", code: 1)
+        }
+
+        let first = cache.records(for: file)
+        let second = cache.records(for: file)
+        XCTAssertTrue(first.isEmpty)
+        XCTAssertTrue(second.isEmpty)
+        XCTAssertEqual(callCount, 2, "A parse failure must not be cached — every call should retry")
+    }
+
 }
 
 // MARK: - ClaudePlan

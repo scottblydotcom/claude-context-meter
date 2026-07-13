@@ -68,7 +68,7 @@ func testParseCacheChangedModificationDateReparsesFile() throws {
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
-    let file = tempDir.appendingPathComponent("session.jsonl")
+    var file = tempDir.appendingPathComponent("session.jsonl")
     try "{}".write(to: file, atomically: true, encoding: .utf8)
 
     var callCount = 0
@@ -82,6 +82,11 @@ func testParseCacheChangedModificationDateReparsesFile() throws {
         [.modificationDate: Date().addingTimeInterval(3600)],
         ofItemAtPath: file.path
     )
+    // URL caches resource values (mtime/size) it has already read, so re-reading the
+    // SAME URL value after mutating the file on disk returns the stale cached snapshot.
+    // Invalidate it to simulate what production sees: RefreshCoordinator always hands
+    // the cache freshly-enumerated URLs, which carry no stale cache.
+    file.removeAllCachedResourceValues()
     _ = cache.records(for: file)
     XCTAssertEqual(callCount, 2, "A changed modification date must trigger a reparse")
 }
@@ -92,7 +97,7 @@ func testParseCacheChangedSizeReparsesFile() throws {
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: tempDir) }
 
-    let file = tempDir.appendingPathComponent("session.jsonl")
+    var file = tempDir.appendingPathComponent("session.jsonl")
     try "{}".write(to: file, atomically: true, encoding: .utf8)
     let fixedDate = Date()
     try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
@@ -106,6 +111,9 @@ func testParseCacheChangedSizeReparsesFile() throws {
     _ = cache.records(for: file)
     try "{}\n{}".write(to: file, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
+    // See comment above: invalidate URL's cached resource values after the on-disk
+    // mutation, or this call will observe the stale pre-mutation size/mtime.
+    file.removeAllCachedResourceValues()
     _ = cache.records(for: file)
     XCTAssertEqual(callCount, 2, "A changed file size (same mtime) must trigger a reparse")
 }
@@ -148,8 +156,8 @@ func testParseCacheParseFailureIsNotCached() throws {
 
     let first = cache.records(for: file)
     let second = cache.records(for: file)
-    XCTAssertEqual(first, [])
-    XCTAssertEqual(second, [])
+    XCTAssertTrue(first.isEmpty)
+    XCTAssertTrue(second.isEmpty)
     XCTAssertEqual(callCount, 2, "A parse failure must not be cached — every call should retry")
 }
 ```
