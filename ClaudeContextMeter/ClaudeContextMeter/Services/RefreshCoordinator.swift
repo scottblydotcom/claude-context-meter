@@ -11,16 +11,20 @@ struct RefreshResult {
     let weekly: WeeklyUsageMetrics
 }
 
-/// Off-main-thread coordinator: performs one directory scan per refresh cycle and
-/// passes derived file lists to the three metric calculators. Returns nil when called
-/// within `minimumInterval` of the previous refresh (debounced).
+/// Off-main-thread coordinator: performs one directory scan per refresh cycle, resolves
+/// each relevant file's records through a JSONLParseCache (so unchanged files are never
+/// re-read or re-decoded), and passes derived records to the three metric calculators.
+/// Returns nil when called within `minimumInterval` of the previous refresh (debounced).
 actor RefreshCoordinator {
 
     private var lastRefreshDate: Date = .distantPast
+    private let parseCache = JSONLParseCache()
     let minimumInterval: TimeInterval
+    private let projectsDir: URL?
 
-    init(minimumInterval: TimeInterval = 5) {
+    init(minimumInterval: TimeInterval = 5, projectsDir: URL? = nil) {
         self.minimumInterval = minimumInterval
+        self.projectsDir = projectsDir
     }
 
     func refresh() async -> RefreshResult? {
@@ -30,11 +34,24 @@ actor RefreshCoordinator {
         }
         lastRefreshDate = now
 
-        let scan = JSONLParser.scanAllFiles(relativeTo: now)
+        let scan = JSONLParser.scanAllFiles(relativeTo: now, projectsDir: projectsDir)
 
-        let context = ContextWindowCalculator.calculate(mostRecentFile: scan.mostRecent)
-        let billing = BillingWindowCalculator.calculate(files: scan.billingFiles)
-        let weekly  = WeeklyUsageCalculator.calculate(files: scan.weeklyFiles)
+        var relevantFiles = Set(scan.billingFiles).union(scan.weeklyFiles)
+        if let mostRecent = scan.mostRecent { relevantFiles.insert(mostRecent) }
+        parseCache.prune(keeping: relevantFiles)
+
+        var recordsByFile: [URL: [SessionRecord]] = [:]
+        for url in relevantFiles {
+            recordsByFile[url] = parseCache.records(for: url)
+        }
+
+        let billingRecords = scan.billingFiles.flatMap { recordsByFile[$0] ?? [] }
+        let weeklyRecords  = scan.weeklyFiles.flatMap { recordsByFile[$0] ?? [] }
+        let mostRecentRecords = scan.mostRecent.flatMap { recordsByFile[$0] } ?? []
+
+        let context = ContextWindowCalculator.calculate(mostRecentFile: scan.mostRecent, records: mostRecentRecords)
+        let billing = BillingWindowCalculator.calculate(records: billingRecords)
+        let weekly  = WeeklyUsageCalculator.calculate(records: weeklyRecords)
 
         return RefreshResult(context: context, billing: billing, weekly: weekly)
     }

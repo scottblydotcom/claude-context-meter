@@ -7,7 +7,10 @@
 
 import Foundation
 
-struct MessageContent: Codable, Sendable {
+/// Plain data types nonisolated because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION =
+/// MainActor`; without this, they'd implicitly inherit @MainActor and be unusable from
+/// RefreshCoordinator (an actor) and the nonisolated calculators that parse/compute over them.
+nonisolated struct MessageContent: Codable, Sendable {
     let model: String?
     let stopReason: String?  // null during streaming, "end_turn" when complete
     let usage: UsageTokens?
@@ -19,7 +22,7 @@ struct MessageContent: Codable, Sendable {
     }
 }
 
-struct UsageTokens: Codable, Sendable {
+nonisolated struct UsageTokens: Codable, Sendable {
     let inputTokens: Int64
     let cacheCreationInputTokens: Int64?
     let cacheReadInputTokens: Int64?
@@ -39,7 +42,7 @@ struct UsageTokens: Codable, Sendable {
 }
 
 /// One line of a Claude JSONL session log file.
-struct SessionRecord: Codable, Sendable {
+nonisolated struct SessionRecord: Codable, Sendable {
     let type: String           // "assistant" or "user"
     let requestId: String?
     let sessionId: String?

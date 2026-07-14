@@ -506,6 +506,29 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(fromFiles.tokenLimit,   fromNoArg.tokenLimit)
     }
 
+    func testBillingCalculateRecordsMatchesCalculateFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("billing_records_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"\(formatter.string(from: now))","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let viaFiles = BillingWindowCalculator.calculate(files: [file])
+        let records = try JSONLParser.parse(fileURL: file)
+        let viaRecords = BillingWindowCalculator.calculate(records: records)
+
+        XCTAssertEqual(viaFiles.outputTokens, viaRecords.outputTokens)
+        XCTAssertEqual(viaFiles.windowStart, viaRecords.windowStart)
+    }
+
     // MARK: - WeeklyUsageCalculator window start
 
     func testWeeklyWindowStartOnResetDayAfterResetHour() {
@@ -649,6 +672,29 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(fromFiles.inputOutputOnly, fromNoArg.inputOutputOnly)
     }
 
+    func testWeeklyCalculateRecordsMatchesCalculateFiles() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("weekly_records_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"\(formatter.string(from: now))","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let viaFiles = WeeklyUsageCalculator.calculate(files: [file])
+        let records = try JSONLParser.parse(fileURL: file)
+        let viaRecords = WeeklyUsageCalculator.calculate(records: records)
+
+        XCTAssertEqual(viaFiles.allTokens, viaRecords.allTokens)
+        XCTAssertEqual(viaFiles.windowStart, viaRecords.windowStart)
+    }
+
     // MARK: - ContextWindowCalculator.calculate(mostRecentFile:)
 
     func testContextCalculateMostRecentFileNilReturnsNil() {
@@ -667,6 +713,30 @@ final class ClaudeContextMeterTests: XCTestCase {
         let b = ContextWindowCalculator.calculate(mostRecentFile: url)
         XCTAssertEqual(a?.totalTokens,  b?.totalTokens)
         XCTAssertEqual(a?.contextLimit, b?.contextLimit)
+    }
+
+    func testContextCalculateRecordsMatchesCalculateMostRecentFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("context_records_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"2026-07-12T10:00:00.000Z","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let viaFile = ContextWindowCalculator.calculate(mostRecentFile: file)
+        let records = try JSONLParser.parse(fileURL: file)
+        let viaRecords = ContextWindowCalculator.calculate(mostRecentFile: file, records: records)
+
+        XCTAssertEqual(viaFile?.totalTokens, viaRecords?.totalTokens)
+        XCTAssertEqual(viaFile?.model, viaRecords?.model)
+    }
+
+    func testContextCalculateRecordsNilFileReturnsNil() {
+        XCTAssertNil(ContextWindowCalculator.calculate(mostRecentFile: nil, records: []))
     }
 
     // MARK: - JSONLParser.scanAllFiles
@@ -762,6 +832,172 @@ final class ClaudeContextMeterTests: XCTestCase {
         try await Task.sleep(nanoseconds: 20_000_000)  // 20ms > 10ms interval
         let second = await coordinator.refresh()
         XCTAssertNotNil(second, "Call after minimumInterval should not be debounced")
+    }
+
+    func testCoordinatorDoesNotReparseUnchangedFileAcrossRefreshes() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("coord_cache_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"\(formatter.string(from: now))","message":{"model":"claude-opus-4-8","stop_reason":"end_turn","usage":{"input_tokens":10,"output_tokens":20}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let coordinator = RefreshCoordinator(minimumInterval: 0, projectsDir: tempDir)
+        _ = await coordinator.refresh()
+        let billingAfterFirst = await coordinator.refresh()
+
+        XCTAssertNotNil(billingAfterFirst, "Second call after interval elapses should not be debounced")
+        XCTAssertEqual(billingAfterFirst?.billing.outputTokens, 20,
+                       "Unchanged file must still be reflected correctly on a cache-hit refresh")
+    }
+
+    // MARK: - JSONLParseCache
+
+    func testParseCacheFirstCallInvokesParseOnce() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_first_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 1, "First call for a URL must invoke parse exactly once")
+    }
+
+    func testParseCacheUnchangedFileIsNotReparsed() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_unchanged_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 1, "Second call for an unchanged file must be a cache hit (no reparse)")
+    }
+
+    func testParseCacheChangedModificationDateReparsesFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_mtime_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(3600)],
+            ofItemAtPath: file.path
+        )
+        // URL caches resource values (mtime/size) it has already read, so re-reading the
+        // SAME URL value after mutating the file on disk would return the stale cached
+        // snapshot rather than the new state. Invalidate it to simulate what production
+        // sees: RefreshCoordinator always hands the cache freshly-enumerated URLs, which
+        // carry no stale cache.
+        file.removeAllCachedResourceValues()
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "A changed modification date must trigger a reparse")
+    }
+
+    func testParseCacheChangedSizeReparsesFile() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_size_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        var file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+        let fixedDate = Date()
+        try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        try "{}\n{}".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
+        // See comment in testParseCacheChangedModificationDateReparsesFile: URL caches
+        // resource values it has already read, so this must be invalidated after the
+        // on-disk mutation or the second records(for:) call will see stale size/mtime.
+        file.removeAllCachedResourceValues()
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "A changed file size (same mtime) must trigger a reparse")
+    }
+
+    func testParseCachePruneEvictsUnkeptURLs() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_prune_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            return []
+        }
+
+        _ = cache.records(for: file)
+        cache.prune(keeping: [])
+        _ = cache.records(for: file)
+        XCTAssertEqual(callCount, 2, "Pruning a URL out of the cache must force a reparse on next access")
+    }
+
+    func testParseCacheParseFailureIsNotCached() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cache_failure_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        try "{}".write(to: file, atomically: true, encoding: .utf8)
+
+        var callCount = 0
+        let cache = JSONLParseCache { _ in
+            callCount += 1
+            throw NSError(domain: "test", code: 1)
+        }
+
+        let first = cache.records(for: file)
+        let second = cache.records(for: file)
+        XCTAssertTrue(first.isEmpty)
+        XCTAssertTrue(second.isEmpty)
+        XCTAssertEqual(callCount, 2, "A parse failure must not be cached — every call should retry")
     }
 
     // MARK: - ClaudeContextMeterApp.isRunningUnderTests

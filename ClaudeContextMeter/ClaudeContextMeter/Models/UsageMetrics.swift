@@ -5,8 +5,12 @@
 
 import Foundation
 
+/// Plain data types nonisolated because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION =
+/// MainActor`; without this, the nonisolated calculators that construct these couldn't
+/// return them. Still freely usable from @MainActor contexts (MetricsViewModel, SwiftUI views).
+///
 /// The calculated context window metrics for the most recent Claude session turn.
-struct ContextWindowMetrics {
+nonisolated struct ContextWindowMetrics {
     let fileName: String
     let model: String
     let totalTokens: Int64
@@ -23,7 +27,7 @@ struct ContextWindowMetrics {
 }
 
 /// The calculated weekly usage metrics across all three token-counting methods.
-struct WeeklyUsageMetrics {
+nonisolated struct WeeklyUsageMetrics {
     /// input + cache_create + cache_read + output
     let allTokens: Int64
     /// input + cache_create + output (excludes cache reads)
@@ -53,7 +57,7 @@ struct WeeklyUsageMetrics {
 }
 
 /// The calculated billing window metrics for the current 5-hour window.
-struct BillingWindowMetrics {
+nonisolated struct BillingWindowMetrics {
     let outputTokens: Int64
     let tokenLimit: Int64
     let windowStart: Date
