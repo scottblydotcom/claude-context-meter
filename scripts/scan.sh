@@ -18,6 +18,16 @@ pass() { echo -e "${GREEN}[PASS]${NC} $1"; ((PASS++)); }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; ((FAIL++)); }
 info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 
+# GUI git clients and IDE-integrated terminals often launch with a minimal PATH
+# that skips Homebrew, since Homebrew's PATH setup normally comes from shell rc
+# files sourced only by interactive login shells. Prepend both known Homebrew
+# prefixes (if present) so require_tool below can still find the tools there.
+for dir in /opt/homebrew/bin /usr/local/bin; do
+    if [ -d "$dir" ] && [[ ":$PATH:" != *":$dir:"* ]]; then
+        PATH="$dir:$PATH"
+    fi
+done
+
 # Resolves a tool via PATH instead of a hardcoded Homebrew prefix, since Intel
 # Homebrew installs to /usr/local/bin and Apple Silicon Homebrew installs to
 # /opt/homebrew/bin. Fails loudly (not as a scan failure) if the tool is missing.
