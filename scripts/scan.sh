@@ -18,6 +18,24 @@ pass() { echo -e "${GREEN}[PASS]${NC} $1"; ((PASS++)); }
 fail() { echo -e "${RED}[FAIL]${NC} $1"; ((FAIL++)); }
 info() { echo -e "${YELLOW}[INFO]${NC} $1"; }
 
+# Resolves a tool via PATH instead of a hardcoded Homebrew prefix, since Intel
+# Homebrew installs to /usr/local/bin and Apple Silicon Homebrew installs to
+# /opt/homebrew/bin. Fails loudly (not as a scan failure) if the tool is missing.
+#
+# `exit` here would only terminate the command-substitution subshell when this
+# function is called as `VAR="$(require_tool ...)"`, not the script itself — so
+# this prints to stderr and returns non-zero instead; callers must check the
+# command substitution's exit status directly.
+require_tool() {
+    local tool="$1"
+    local resolved
+    if ! resolved="$(command -v "$tool")"; then
+        echo -e "${RED}[ERROR]${NC} '$tool' not found on PATH — install it (e.g. \`brew install $tool\`) before running this script." >&2
+        return 1
+    fi
+    echo "$resolved"
+}
+
 echo ""
 echo "========================================"
 echo "  Claude Context Meter — Security Scan"
@@ -26,7 +44,8 @@ echo ""
 
 # ── Gitleaks ─────────────────────────────────────────────────────────────────
 info "Running Gitleaks (secret scanning)..."
-if /usr/local/bin/gitleaks detect \
+GITLEAKS_BIN="$(require_tool gitleaks)" || exit 2
+if "$GITLEAKS_BIN" detect \
     --source "$REPO_ROOT" \
     --no-banner \
     --redact \
@@ -41,7 +60,8 @@ echo ""
 
 # ── Semgrep ───────────────────────────────────────────────────────────────────
 info "Running Semgrep (static analysis)..."
-if /usr/local/bin/semgrep scan \
+SEMGREP_BIN="$(require_tool semgrep)" || exit 2
+if "$SEMGREP_BIN" scan \
     --config=auto \
     --quiet \
     --error \
@@ -56,10 +76,11 @@ echo ""
 
 # ── Trivy ─────────────────────────────────────────────────────────────────────
 info "Running Trivy (vulnerability scan)..."
+TRIVY_BIN="$(require_tool trivy)" || exit 2
 # Use a minimal Docker config to avoid Docker Desktop credential errors
 TRIVY_DOCKER_CFG="$(mktemp -d)"
 echo '{}' > "$TRIVY_DOCKER_CFG/config.json"
-if DOCKER_CONFIG="$TRIVY_DOCKER_CFG" /usr/local/bin/trivy fs \
+if DOCKER_CONFIG="$TRIVY_DOCKER_CFG" "$TRIVY_BIN" fs \
     --exit-code 1 \
     --severity HIGH,CRITICAL \
     --quiet \
