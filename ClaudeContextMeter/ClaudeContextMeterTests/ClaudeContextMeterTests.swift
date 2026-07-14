@@ -1000,6 +1000,16 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(callCount, 2, "A parse failure must not be cached — every call should retry")
     }
 
+    // MARK: - ClaudeContextMeterApp.isRunningUnderTests
+
+    func testIsRunningUnderTestsIsTrueDuringXCTestRun() {
+        // This test itself runs inside an XCTest host, so XCTestConfigurationFilePath
+        // is genuinely set in the environment — this exercises the real detection path,
+        // not a mock.
+        XCTAssertTrue(ClaudeContextMeterApp.isRunningUnderTests,
+                      "XCTestConfigurationFilePath must be present in the environment during any XCTest run")
+    }
+
 }
 
 // MARK: - ClaudePlan
