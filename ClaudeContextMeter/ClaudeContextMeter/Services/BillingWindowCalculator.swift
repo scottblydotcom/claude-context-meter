@@ -5,7 +5,11 @@
 
 import Foundation
 
-enum BillingWindowCalculator {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors. This
+/// is pure computation with no UI state — safe and intended to run off the main thread.
+nonisolated enum BillingWindowCalculator {
 
     static let limitKey      = "billingTokenLimit"
     static let windowDuration: TimeInterval = 5 * 3600  // 5 hours

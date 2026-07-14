@@ -5,7 +5,11 @@
 
 import Foundation
 
-enum WeeklyUsageCalculator {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors. This
+/// is pure computation with no UI state — safe and intended to run off the main thread.
+nonisolated enum WeeklyUsageCalculator {
 
     static let weekdayKey = "weeklyResetWeekday"  // Calendar weekday: 1=Sun … 7=Sat
     static let hourKey    = "weeklyResetHour"      // 0–23
