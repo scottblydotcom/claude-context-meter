@@ -7,7 +7,9 @@
 
 import Foundation
 
-enum ModelLimits {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, calls from the nonisolated ContextWindowCalculator would be Swift 6 errors.
+nonisolated enum ModelLimits {
     static let defaultContextWindow: Int64 = 200_000
     static let extendedContextWindow: Int64 = 1_000_000
 

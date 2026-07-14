@@ -5,7 +5,11 @@
 
 import Foundation
 
-enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, BillingWindowCalculator.defaultLimit (nonisolated) couldn't reference
+/// `ClaudePlan.pro.tokenLimit` at compile time. nonisolated is still freely callable from
+/// @MainActor contexts (SettingsView, MetricsViewModel), so this doesn't restrict UI usage.
+nonisolated enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     static let planKey = "selectedPlan"
 
     case pro

@@ -5,7 +5,11 @@
 
 import Foundation
 
-enum ContextWindowCalculator {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors. This
+/// is pure computation with no UI state — safe and intended to run off the main thread.
+nonisolated enum ContextWindowCalculator {
 
     /// Core calculation: accepts the most-recent session file URL plus its pre-parsed
     /// records (avoids redundant file I/O when called from RefreshCoordinator, which

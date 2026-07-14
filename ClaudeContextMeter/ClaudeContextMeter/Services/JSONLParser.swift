@@ -7,7 +7,12 @@
 
 import Foundation
 
-enum JSONLParser {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors. This
+/// is pure file I/O and computation with no UI state — safe and intended to run off the main
+/// thread (that's the entire point of RefreshCoordinator being an actor).
+nonisolated enum JSONLParser {
 
     struct SessionScan {
         let mostRecent: URL?

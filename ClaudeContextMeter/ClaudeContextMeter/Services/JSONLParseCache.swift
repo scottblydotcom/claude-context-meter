@@ -11,8 +11,11 @@ import Foundation
 /// far cheaper than hashing file contents, which would defeat the point of caching.
 ///
 /// Not thread-safe on its own. Intended to be owned by a single actor (RefreshCoordinator)
-/// so all access is naturally serialized.
-final class JSONLParseCache {
+/// so all access is naturally serialized. Marked `nonisolated` because this project sets
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; without this, every member would implicitly
+/// inherit @MainActor isolation and calls from RefreshCoordinator (an actor, not @MainActor)
+/// would be Swift 6 language-mode errors.
+nonisolated final class JSONLParseCache {
     private struct Entry {
         let modificationDate: Date
         let size: Int
