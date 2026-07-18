@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "claude_context_meter",
+  "project_id": "2d54f279-ceec-4720-ad7e-3e704612c7e8"
+}
