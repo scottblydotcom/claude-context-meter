@@ -28,7 +28,7 @@ nonisolated enum ModelLimits {
         "claude-sonnet-4-6",
         "claude-sonnet-5",
         "claude-fable-5",
-        "claude-mythos-5",
+        "claude-mythos-5"
     ]
 
     /// Single UserDefaults key storing all confirmed-1M sessions as [sessionId: confirmedDate].

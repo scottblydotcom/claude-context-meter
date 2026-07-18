@@ -22,8 +22,8 @@ nonisolated enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     /// adjusting a plan's data is a single switch case rather than two switches kept in sync.
     private var spec: (label: String, tokenLimit: Int64) {
         switch self {
-        case .pro:    return ("Pro",     131_000)
-        case .max5x:  return ("Max 5x",  655_000)
+        case .pro:    return ("Pro", 131_000)
+        case .max5x:  return ("Max 5x", 655_000)
         case .max20x: return ("Max 20x", 2_620_000)
         }
     }
