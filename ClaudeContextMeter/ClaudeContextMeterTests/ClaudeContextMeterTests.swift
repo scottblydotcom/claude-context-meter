@@ -263,18 +263,11 @@ final class ClaudeContextMeterTests: XCTestCase {
     /// platform.claude.com/docs/en/build-with-claude/context-windows (checked 2026-07-14).
     /// Opus 4.7 is already covered by the tests above — this covers the rest of the lineup
     /// so a future model addition/removal is caught by a parameterized-style sweep instead
-    /// of requiring a new hand-written test per model.
-    private static let extendedContextCapableModels = [
-        "claude-opus-4-6",
-        "claude-opus-4-8",
-        "claude-sonnet-4-6",
-        "claude-sonnet-5",
-        "claude-fable-5",
-        "claude-mythos-5",
-    ]
-
+    /// of requiring a new hand-written test per model. Reads `ModelLimits.extendedContextModels`
+    /// directly rather than duplicating the list, so this test can't silently drift out of
+    /// sync with production data (it previously omitted claude-opus-4-7 for this reason).
     func testAllCurrentExtendedContextModelsReturn1MWhenOver200k() {
-        for model in Self.extendedContextCapableModels {
+        for model in ModelLimits.extendedContextModels {
             let sessionId = "test-ml-extended-\(model)"
             registerModelLimitsTeardown(sessionId: sessionId)
             let result = ModelLimits.contextWindow(

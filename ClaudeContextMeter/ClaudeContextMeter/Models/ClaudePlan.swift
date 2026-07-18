@@ -20,16 +20,11 @@ nonisolated enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
 
     /// Per-plan display label and billing-window token limit, in one place so adding or
     /// adjusting a plan's data is a single switch case rather than two switches kept in sync.
-    private struct Spec {
-        let label: String
-        let tokenLimit: Int64
-    }
-
-    private var spec: Spec {
+    private var spec: (label: String, tokenLimit: Int64) {
         switch self {
-        case .pro:    return Spec(label: "Pro",     tokenLimit: 131_000)
-        case .max5x:  return Spec(label: "Max 5x",  tokenLimit: 655_000)
-        case .max20x: return Spec(label: "Max 20x", tokenLimit: 2_620_000)
+        case .pro:    return ("Pro",     131_000)
+        case .max5x:  return ("Max 5x",  655_000)
+        case .max20x: return ("Max 20x", 2_620_000)
         }
     }
 
