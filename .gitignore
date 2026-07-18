@@ -22,3 +22,4 @@ session-notes/
 *.db
 .beads-credential-key
 .beads/proxieddb/
+.env
