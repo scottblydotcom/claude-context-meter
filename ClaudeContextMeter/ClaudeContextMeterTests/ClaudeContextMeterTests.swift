@@ -203,17 +203,6 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(postCompaction, 1_000_000)
     }
 
-    func testNonOpusModelOver200kStillReturns200k() {
-        registerModelLimitsTeardown(sessionId: "test-ml-sonnet")
-        // Only claude-opus-4-7 can ever be 1M; Sonnet cannot
-        let result = ModelLimits.contextWindow(
-            for: "claude-sonnet-4-6",
-            sessionId: "test-ml-sonnet",
-            observedTokens: 999_999
-        )
-        XCTAssertEqual(result, 200_000)
-    }
-
     func testUnknownModelReturns200k() {
         registerModelLimitsTeardown(sessionId: "test-ml-unknown")
         let result = ModelLimits.contextWindow(
@@ -266,6 +255,39 @@ final class ClaudeContextMeterTests: XCTestCase {
         let remaining = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
             as? [String: Date]
         XCTAssertNil(remaining?[staleSessionId], "Stale entry should have been pruned from opusSessionLimits")
+    }
+
+    // MARK: - ModelLimits — current 1M-capable lineup (data-driven lookup)
+
+    /// Every model Anthropic currently ships with a 1M-token context option, per
+    /// platform.claude.com/docs/en/build-with-claude/context-windows (checked 2026-07-14).
+    /// Opus 4.7 is already covered by the tests above — this covers the rest of the lineup
+    /// so a future model addition/removal is caught by a parameterized-style sweep instead
+    /// of requiring a new hand-written test per model. Reads `ModelLimits.extendedContextModels`
+    /// directly rather than duplicating the list, so this test can't silently drift out of
+    /// sync with production data (it previously omitted claude-opus-4-7 for this reason).
+    func testAllCurrentExtendedContextModelsReturn1MWhenOver200k() {
+        for model in ModelLimits.extendedContextModels {
+            let sessionId = "test-ml-extended-\(model)"
+            registerModelLimitsTeardown(sessionId: sessionId)
+            let result = ModelLimits.contextWindow(
+                for: model,
+                sessionId: sessionId,
+                observedTokens: 250_000
+            )
+            XCTAssertEqual(result, 1_000_000, "\(model) should be recognized as 1M-capable")
+        }
+    }
+
+    func testHaiku45Over200kStillReturns200k() {
+        // Per current Anthropic docs, Haiku 4.5 is the only current model still capped at 200k.
+        registerModelLimitsTeardown(sessionId: "test-ml-haiku")
+        let result = ModelLimits.contextWindow(
+            for: "claude-haiku-4-5",
+            sessionId: "test-ml-haiku",
+            observedTokens: 999_999
+        )
+        XCTAssertEqual(result, 200_000)
     }
 
     // MARK: - JSONLParser
