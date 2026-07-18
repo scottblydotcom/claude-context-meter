@@ -21,5 +21,4 @@ session-notes/
 .dolt/
 *.db
 .beads-credential-key
-.beads/proxieddb/
 .env
