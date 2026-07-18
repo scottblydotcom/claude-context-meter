@@ -13,8 +13,23 @@ nonisolated enum ModelLimits {
     static let defaultContextWindow: Int64 = 200_000
     static let extendedContextWindow: Int64 = 1_000_000
 
-    /// Only Opus 4.7 can use the extended 1M context window.
-    private static let extendedContextModel = "claude-opus-4-7"
+    /// Model IDs (as they appear in JSONL `message.model`) that can run with a 1M-token
+    /// context window. A model in this set still starts at `defaultContextWindow` — the
+    /// 1M option is a per-session opt-in Anthropic detects reactively (see
+    /// `contextWindow(for:sessionId:observedTokens:)`), not a fixed property of the model.
+    ///
+    /// Source: platform.claude.com/docs/en/build-with-claude/context-windows, checked
+    /// 2026-07-14 — only Haiku 4.5 lacks a 1M option among current models. Verify against
+    /// current docs before editing; this list moves as fast as the model lineup does.
+    private static let extendedContextModels: Set<String> = [
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5",
+    ]
 
     /// Single UserDefaults key storing all confirmed-1M sessions as [sessionId: confirmedDate].
     /// One key replaces the previous per-session key pairs (sessionLimit_<id>, sessionLimitDate_<id>),
@@ -26,7 +41,7 @@ nonisolated enum ModelLimits {
 
     /// Returns the context window limit for a session.
     ///
-    /// Both Opus 4.7 variants (200k and 1M) report the same model string in JSONL.
+    /// A 1M-capable model's 200k and 1M variants report the same model string in JSONL.
     /// Detection is reactive: once `observedTokens` exceeds 200k for a given session,
     /// the confirmation date is stored in a single `[String: Date]` dictionary under
     /// `opusSessionLimitsKey` in UserDefaults. This survives autocompaction resets
@@ -39,7 +54,7 @@ nonisolated enum ModelLimits {
     /// **Empty/nil sessionId:** callers must guard against nil before calling; this
     /// function guards against empty strings to prevent collisions on the "" key.
     static func contextWindow(for model: String, sessionId: String, observedTokens: Int64) -> Int64 {
-        guard model == extendedContextModel, !sessionId.isEmpty else { return defaultContextWindow }
+        guard extendedContextModels.contains(model), !sessionId.isEmpty else { return defaultContextWindow }
 
         let defaults = UserDefaults.standard
         pruneStaleEntriesIfNeeded(defaults: defaults)
