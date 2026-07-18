@@ -70,6 +70,10 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear {
+            // This app is LSUIElement (no Dock icon), so the Settings window is created
+            // but macOS never brings it to the foreground on its own — it opens behind
+            // whatever app currently has focus and looks like the click did nothing.
+            NSApp.activate(ignoringOtherApps: true)
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
             // Sync the text field to the current stored limit. Use the Pro default
             // as the display fallback if stored is 0 — BillingWindowCalculator already
