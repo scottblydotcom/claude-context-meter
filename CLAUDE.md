@@ -9,7 +9,15 @@ Run `./scripts/scan.sh` before every commit. All three tools must pass:
 - Semgrep — static analysis
 - Trivy — dependency vulnerability scan
 
-The pre-commit hook runs Gitleaks automatically as a backstop.
+The pre-commit hook runs Gitleaks automatically as a backstop. It's tracked in the repo at
+`.beads/hooks/pre-commit` (not `.git/hooks/`, which isn't version-controlled). `git` only reads
+hooks from there once `core.hooksPath` points at it, which `bd init` (or `bd hooks install
+--beads`) sets automatically — verified empirically: a fresh clone with no `core.hooksPath`
+set does **not** block a commit containing a real secret; running `bd init` once fixes that
+immediately, no other setup step needed. Since this project's AGENTS.md/CLAUDE.md already
+direct any agent working here to run `bd prime` early in a session, AI agents get this
+activated automatically; a human cloning fresh needs to run `bd init` (or `bd prime`) once
+before the backstop is live.
 
 ## CI Pipeline Order
 
