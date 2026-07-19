@@ -70,7 +70,13 @@ struct PopoverContentView: View {
                     // Covers the case where the Settings window is already open but
                     // buried behind another app — SettingsView's own onAppear only
                     // fires on a fresh open, not when an existing window regains focus.
+                    // Does NOT reliably pull the window across from a different Space
+                    // than the one currently active — see the known-limitation note on
+                    // SettingsView.bringSettingsWindowToActiveSpace() for what this
+                    // does and doesn't cover; kept here anyway since it's a correct,
+                    // low-cost no-op when the window is already on this Space.
                     NSApp.activate(ignoringOtherApps: true)
+                    SettingsView.bringSettingsWindowToActiveSpace()
                 })
                 Spacer()
                 Button("Quit") {
