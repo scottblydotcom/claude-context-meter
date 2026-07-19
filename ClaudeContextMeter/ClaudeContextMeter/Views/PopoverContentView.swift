@@ -66,6 +66,12 @@ struct PopoverContentView: View {
                 }
                 .buttonStyle(.plain)
                 .help("Settings")
+                .simultaneousGesture(TapGesture().onEnded {
+                    // Covers the case where the Settings window is already open but
+                    // buried behind another app — SettingsView's own onAppear only
+                    // fires on a fresh open, not when an existing window regains focus.
+                    NSApp.activate(ignoringOtherApps: true)
+                })
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
