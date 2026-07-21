@@ -7,12 +7,29 @@
 
 import Foundation
 
-enum ModelLimits {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, calls from the nonisolated ContextWindowCalculator would be Swift 6 errors.
+nonisolated enum ModelLimits {
     static let defaultContextWindow: Int64 = 200_000
     static let extendedContextWindow: Int64 = 1_000_000
 
-    /// Only Opus 4.7 can use the extended 1M context window.
-    private static let extendedContextModel = "claude-opus-4-7"
+    /// Model IDs (as they appear in JSONL `message.model`) that can run with a 1M-token
+    /// context window. A model in this set still starts at `defaultContextWindow` — the
+    /// 1M option is a per-session opt-in Anthropic detects reactively (see
+    /// `contextWindow(for:sessionId:observedTokens:)`), not a fixed property of the model.
+    ///
+    /// Source: platform.claude.com/docs/en/build-with-claude/context-windows, checked
+    /// 2026-07-14 — only Haiku 4.5 lacks a 1M option among current models. Verify against
+    /// current docs before editing; this list moves as fast as the model lineup does.
+    static let extendedContextModels: Set<String> = [
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-mythos-5"
+    ]
 
     /// Single UserDefaults key storing all confirmed-1M sessions as [sessionId: confirmedDate].
     /// One key replaces the previous per-session key pairs (sessionLimit_<id>, sessionLimitDate_<id>),
@@ -22,9 +39,15 @@ enum ModelLimits {
     /// UserDefaults key tracking when we last ran the 30-day stale-entry prune.
     static let lastPruneDateKey = "sessionLimitsLastPruneDate"
 
+    /// Serializes the opusSessionLimits read-modify-write below. `UserDefaults` operations
+    /// are individually thread-safe, but this type is `nonisolated` specifically so it can
+    /// be called from concurrent contexts (see type doc comment) — without this lock, two
+    /// concurrent callers could race and silently drop one session's confirmation.
+    private static let lock = NSLock()
+
     /// Returns the context window limit for a session.
     ///
-    /// Both Opus 4.7 variants (200k and 1M) report the same model string in JSONL.
+    /// A 1M-capable model's 200k and 1M variants report the same model string in JSONL.
     /// Detection is reactive: once `observedTokens` exceeds 200k for a given session,
     /// the confirmation date is stored in a single `[String: Date]` dictionary under
     /// `opusSessionLimitsKey` in UserDefaults. This survives autocompaction resets
@@ -37,26 +60,28 @@ enum ModelLimits {
     /// **Empty/nil sessionId:** callers must guard against nil before calling; this
     /// function guards against empty strings to prevent collisions on the "" key.
     static func contextWindow(for model: String, sessionId: String, observedTokens: Int64) -> Int64 {
-        guard model == extendedContextModel, !sessionId.isEmpty else { return defaultContextWindow }
+        guard extendedContextModels.contains(model), !sessionId.isEmpty else { return defaultContextWindow }
 
-        let defaults = UserDefaults.standard
-        pruneStaleEntriesIfNeeded(defaults: defaults)
+        return lock.withLock {
+            let defaults = UserDefaults.standard
+            pruneStaleEntriesIfNeeded(defaults: defaults)
 
-        var limits = defaults.dictionary(forKey: opusSessionLimitsKey) as? [String: Date] ?? [:]
+            var limits = defaults.dictionary(forKey: opusSessionLimitsKey) as? [String: Date] ?? [:]
 
-        // Already confirmed as 1M in a prior call — honour across compaction
-        if limits[sessionId] != nil {
-            return extendedContextWindow
+            // Already confirmed as 1M in a prior call — honour across compaction
+            if limits[sessionId] != nil {
+                return extendedContextWindow
+            }
+
+            // First time we observe tokens exceeding the 200k boundary
+            if observedTokens > defaultContextWindow {
+                limits[sessionId] = Date()
+                defaults.set(limits, forKey: opusSessionLimitsKey)
+                return extendedContextWindow
+            }
+
+            return defaultContextWindow
         }
-
-        // First time we observe tokens exceeding the 200k boundary
-        if observedTokens > defaultContextWindow {
-            limits[sessionId] = Date()
-            defaults.set(limits, forKey: opusSessionLimitsKey)
-            return extendedContextWindow
-        }
-
-        return defaultContextWindow
     }
 
     // MARK: - Private

@@ -70,6 +70,11 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .onAppear {
+            // This app is LSUIElement (no Dock icon), so the Settings window is created
+            // but macOS never brings it to the foreground on its own — it opens behind
+            // whatever app currently has focus and looks like the click did nothing.
+            NSApp.activate(ignoringOtherApps: true)
+            Self.bringSettingsWindowToActiveSpace()
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
             // Sync the text field to the current stored limit. Use the Pro default
             // as the display fallback if stored is 0 — BillingWindowCalculator already
@@ -89,6 +94,28 @@ struct SettingsView: View {
         }
         guard value != tokenLimit else { return }  // no-op on double-fire (e.g. Return key)
         tokenLimit = value
+    }
+
+    /// SwiftUI's Settings window uses a stable frame-autosave name we can match on
+    /// (confirmed via `defaults read`, key "NSWindow Frame com_apple_SwiftUI_Settings_window").
+    ///
+    /// **Known limitation (manually verified 2026-07-18):** `.moveToActiveSpace` does NOT
+    /// reliably pull the window to whichever Space/screen the user is currently viewing
+    /// when they click the gear icon — if the window is on a different Space than the one
+    /// currently active, the click does nothing visible and the window stays put. It *does*
+    /// correctly resolve the more common case this fix targets: the window already being on
+    /// the user's current Space but buried behind another app's focus, or the user having
+    /// since switched to the Space where the window already lives (at which point it's
+    /// frontmost and reachable, no further action needed). True "always jump to me from any
+    /// Space" behavior was attempted and abandoned — see the old `feature/settings-window-focus`
+    /// branch — and isn't solved here. Workaround if you land somewhere the window isn't
+    /// visible: switch to the Space/screen it's actually on (Mission Control), it'll be there.
+    static func bringSettingsWindowToActiveSpace() {
+        guard let window = NSApp.windows.first(where: {
+            $0.frameAutosaveName == "com_apple_SwiftUI_Settings_window"
+        }) else { return }
+        window.collectionBehavior.insert(.moveToActiveSpace)
+        window.makeKeyAndOrderFront(nil)
     }
 }
 

@@ -5,7 +5,11 @@
 
 import Foundation
 
-enum BillingWindowCalculator {
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors. This
+/// is pure computation with no UI state — safe and intended to run off the main thread.
+nonisolated enum BillingWindowCalculator {
 
     static let limitKey      = "billingTokenLimit"
     static let windowDuration: TimeInterval = 5 * 3600  // 5 hours
@@ -61,9 +65,10 @@ enum BillingWindowCalculator {
         }
     }
 
-    /// Core calculation: accepts a pre-built file list (avoids redundant directory scans
-    /// when called from RefreshCoordinator).
-    static func calculate(files: [URL]) -> BillingWindowMetrics {
+    /// Core calculation: accepts pre-parsed records (avoids redundant file I/O when
+    /// called from RefreshCoordinator, which resolves records once per file across
+    /// all three calculators via JSONLParseCache).
+    static func calculate(records: [SessionRecord]) -> BillingWindowMetrics {
         let now = Date()
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -73,43 +78,40 @@ enum BillingWindowCalculator {
         var earliestTimestamp: [String: Date] = [:]
         var outputTokensByRequestId: [String: Int64] = [:]
 
-        for url in files {
-            guard let parsed = try? JSONLParser.parse(fileURL: url) else { continue }
-            for record in parsed {
-                guard record.type == "assistant" || record.type == "user",
-                      let rid = record.requestId,
-                      let timestamp = formatter.date(from: record.timestamp),
-                      timestamp >= lookback
-                else { continue }
+        for record in records {
+            guard record.type == "assistant" || record.type == "user",
+                  let rid = record.requestId,
+                  let timestamp = formatter.date(from: record.timestamp),
+                  timestamp >= lookback
+            else { continue }
 
-                if let existing = earliestTimestamp[rid] {
-                    if timestamp < existing { earliestTimestamp[rid] = timestamp }
-                } else {
-                    earliestTimestamp[rid] = timestamp
-                }
+            if let existing = earliestTimestamp[rid] {
+                if timestamp < existing { earliestTimestamp[rid] = timestamp }
+            } else {
+                earliestTimestamp[rid] = timestamp
+            }
 
-                if record.isCompleteAssistantRecord,
-                   let outputTokens = record.message?.usage?.outputTokens {
-                    outputTokensByRequestId[rid] = outputTokens
-                }
+            if record.isCompleteAssistantRecord,
+               let outputTokens = record.message?.usage?.outputTokens {
+                outputTokensByRequestId[rid] = outputTokens
             }
         }
 
-        var records: [(timestamp: Date, outputTokens: Int64)] = []
+        var recordsList: [(timestamp: Date, outputTokens: Int64)] = []
         for (rid, outputTokens) in outputTokensByRequestId {
             guard let timestamp = earliestTimestamp[rid] else { continue }
-            records.append((timestamp: timestamp, outputTokens: outputTokens))
+            recordsList.append((timestamp: timestamp, outputTokens: outputTokens))
         }
-        records.sort { $0.timestamp < $1.timestamp }
+        recordsList.sort { $0.timestamp < $1.timestamp }
 
-        let timestamps = records.map { $0.timestamp }
+        let timestamps = recordsList.map { $0.timestamp }
         guard let windowStart = findWindowStart(from: timestamps, relativeTo: now) else {
             return BillingWindowMetrics(outputTokens: 0, tokenLimit: tokenLimit,
                                         windowStart: now, nextReset: now.addingTimeInterval(windowDuration))
         }
 
         let nextReset = windowStart.addingTimeInterval(windowDuration)
-        let totalOutputTokens: Int64 = records
+        let totalOutputTokens: Int64 = recordsList
             .filter { $0.timestamp >= windowStart }
             .reduce(0) { $0 + $1.outputTokens }
 
@@ -121,11 +123,20 @@ enum BillingWindowCalculator {
         )
     }
 
+    /// Convenience wrapper: parses each file, then delegates to calculate(records:).
+    /// Prefer calculate(records:) directly when records are already available (e.g.
+    /// from RefreshCoordinator's JSONLParseCache) to avoid redundant parsing.
+    static func calculate(files: [URL]) -> BillingWindowMetrics {
+        let records = files.flatMap { (try? JSONLParser.parse(fileURL: $0)) ?? [] }
+        return calculate(records: records)
+    }
+
     /// Convenience wrapper: scans files using the standard 11h lookback, then delegates
-    /// to calculate(files:). Use calculate(files:) directly from RefreshCoordinator.
+    /// to calculate(files:). RefreshCoordinator uses calculate(records:) directly via
+    /// JSONLParseCache instead of calling through this wrapper.
     ///
     /// IMPORTANT: if you widen/narrow the lookback interval here, update the record-level
-    /// `timestamp >= lookback` guard inside calculate(files:) together — they must stay in sync.
+    /// `timestamp >= lookback` guard inside calculate(records:) together — they must stay in sync.
     static func calculate() -> BillingWindowMetrics {
         let now = Date()
         let lookback = now.addingTimeInterval(-10 * 3600)
