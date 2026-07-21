@@ -79,7 +79,7 @@ nonisolated enum WeeklyUsageCalculator {
             guard record.isCompleteAssistantRecord,
                   let rid = record.requestId,
                   let timestamp = formatter.date(from: record.timestamp),
-                  timestamp >= windowStart, timestamp <= now,
+                  timestamp >= windowStart, timestamp < nextReset,
                   let usage = record.message?.usage
             else { continue }
 
