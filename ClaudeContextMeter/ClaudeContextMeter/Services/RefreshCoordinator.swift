@@ -18,7 +18,7 @@ struct RefreshResult {
 actor RefreshCoordinator {
 
     private var lastRefreshDate: Date = .distantPast
-    private let parseCache = JSONLParseCache()
+    private var parseCache = JSONLParseCache()
     let minimumInterval: TimeInterval
     private let projectsDir: URL?
 

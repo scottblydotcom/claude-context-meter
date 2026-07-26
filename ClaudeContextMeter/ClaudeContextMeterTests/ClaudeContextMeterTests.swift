@@ -968,7 +968,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try "{}".write(to: file, atomically: true, encoding: .utf8)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             return []
         }
@@ -987,7 +987,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try "{}".write(to: file, atomically: true, encoding: .utf8)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             return []
         }
@@ -1007,7 +1007,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try "{}".write(to: file, atomically: true, encoding: .utf8)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             return []
         }
@@ -1039,7 +1039,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try FileManager.default.setAttributes([.modificationDate: fixedDate], ofItemAtPath: file.path)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             return []
         }
@@ -1065,7 +1065,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try "{}".write(to: file, atomically: true, encoding: .utf8)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             return []
         }
@@ -1086,7 +1086,7 @@ final class ClaudeContextMeterTests: XCTestCase {
         try "{}".write(to: file, atomically: true, encoding: .utf8)
 
         var callCount = 0
-        let cache = JSONLParseCache { _ in
+        var cache = JSONLParseCache { _ in
             callCount += 1
             throw NSError(domain: "test", code: 1)
         }
