@@ -10,12 +10,13 @@ import Foundation
 /// session JSONL files are append-only, so mtime+size is a safe, cheap heuristic —
 /// far cheaper than hashing file contents, which would defeat the point of caching.
 ///
-/// Not thread-safe on its own. Intended to be owned by a single actor (RefreshCoordinator)
-/// so all access is naturally serialized. Marked `nonisolated` because this project sets
-/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; without this, every member would implicitly
-/// inherit @MainActor isolation and calls from RefreshCoordinator (an actor, not @MainActor)
-/// would be Swift 6 language-mode errors.
-nonisolated final class JSONLParseCache {
+/// A value type owned by a single actor (RefreshCoordinator) as a stored `var`. All access is
+/// serialized by that actor, and the `mutating` methods make the compiler enforce exclusive
+/// access to the cache — compiler-checked thread safety, no manual lock (claude-context-meter-5ww).
+/// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
+/// without this, every member would implicitly inherit @MainActor isolation and calls from
+/// RefreshCoordinator (an actor, not @MainActor) would be Swift 6 language-mode errors.
+nonisolated struct JSONLParseCache {
     private struct Entry {
         let modificationDate: Date
         let size: Int
@@ -33,7 +34,7 @@ nonisolated final class JSONLParseCache {
     /// modification date and size are unchanged since the last call. On a cache miss
     /// (new file, or changed mtime/size), calls `parse` and caches the result. A parse
     /// failure returns `[]` without caching, so the next call retries.
-    func records(for url: URL) -> [SessionRecord] {
+    mutating func records(for url: URL) -> [SessionRecord] {
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let mdate = values?.contentModificationDate ?? .distantPast
         let size  = values?.fileSize ?? -1
@@ -49,7 +50,7 @@ nonisolated final class JSONLParseCache {
 
     /// Drops cached entries for URLs not in `validURLs`, so memory stays bounded to
     /// files currently inside the billing/weekly windows instead of growing forever.
-    func prune(keeping validURLs: Set<URL>) {
+    mutating func prune(keeping validURLs: Set<URL>) {
         cache = cache.filter { validURLs.contains($0.key) }
     }
 }

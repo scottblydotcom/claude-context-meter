@@ -7,6 +7,7 @@ import SwiftUI
 
 struct PopoverContentView: View {
     @EnvironmentObject private var viewModel: MetricsViewModel
+    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,24 +61,28 @@ struct PopoverContentView: View {
 
             // Footer
             HStack {
-                SettingsLink {
+                Button {
+                    // Open (or resurface) Settings from the button's PRIMARY action so
+                    // VoiceOver / keyboard activation triggers it. The previous
+                    // SettingsLink + .simultaneousGesture(TapGesture()) bypassed standard
+                    // accessibility activation (claude-context-meter-djp). openSettings() is
+                    // the public macOS 14+ equivalent of SettingsLink.
+                    //
+                    // The activate + bring-forward covers the case where the Settings window
+                    // is already open but buried behind another app — SettingsView's own
+                    // onAppear only fires on a fresh open, not when an existing window regains
+                    // focus. It does NOT reliably pull the window across from a different Space
+                    // than the one currently active — see the known-limitation note on
+                    // SettingsView.bringSettingsWindowToActiveSpace().
+                    openSettings()
+                    NSApp.activate(ignoringOtherApps: true)
+                    SettingsView.bringSettingsWindowToActiveSpace()
+                } label: {
                     Image(systemName: "gearshape")
                         .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .help("Settings")
-                .simultaneousGesture(TapGesture().onEnded {
-                    // Covers the case where the Settings window is already open but
-                    // buried behind another app — SettingsView's own onAppear only
-                    // fires on a fresh open, not when an existing window regains focus.
-                    // Does NOT reliably pull the window across from a different Space
-                    // than the one currently active — see the known-limitation note on
-                    // SettingsView.bringSettingsWindowToActiveSpace() for what this
-                    // does and doesn't cover; kept here anyway since it's a correct,
-                    // low-cost no-op when the window is already on this Space.
-                    NSApp.activate(ignoringOtherApps: true)
-                    SettingsView.bringSettingsWindowToActiveSpace()
-                })
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)

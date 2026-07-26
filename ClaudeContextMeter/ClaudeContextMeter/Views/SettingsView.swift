@@ -109,6 +109,11 @@ struct SettingsView: View {
             tokenLimitText = tokenLimit > 0 ? "\(tokenLimit)" : "\(Int(ClaudePlan.pro.tokenLimit))"
         }
         .frame(width: 360, height: 360)
+        .onDisappear {
+            // Tell the menu-bar meter to re-read settings (plan, token limit, weekly reset)
+            // when this window closes — the view model lives in a separate scene.
+            NotificationCenter.default.post(name: .settingsDidClose, object: nil)
+        }
     }
 
     private func commitTokenLimit() {

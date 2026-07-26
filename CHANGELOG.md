@@ -3,6 +3,30 @@
 All notable changes to Claude Context Meter are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.4.0] - 2026-07-26
+
+### Added
+- Support for **Claude Opus 5** (`claude-opus-5`, 1M context), added to the model → context-window
+  lookup ([#21](https://github.com/scottblydotcom/claude-context-meter/pull/21))
+- **Configurable weekly reset** day and time in Settings, so the Weekly Usage window matches the
+  reset shown in Claude's own usage settings (Anthropic doesn't expose the schedule in any readable
+  file) ([#22](https://github.com/scottblydotcom/claude-context-meter/pull/22))
+
+### Fixed
+- Context-window denominator is now deterministic per (model, input tokens): a 1M-capable model
+  sitting below 200k tokens correctly reports the **1M** window instead of 200k (a 178k session now
+  reads 18%, not 89%). The safety net compares input-side tokens (excluding generated output), so a
+  maxed-out 200k model is never falsely promoted to 1M
+  ([#21](https://github.com/scottblydotcom/claude-context-meter/pull/21))
+- The menu-bar meter now refreshes when the Settings window closes, so plan, token-limit, and weekly
+  reset changes take effect immediately instead of on the next heartbeat
+- Running the test suite no longer wipes the user's saved plan / token-limit preferences (tests now
+  use an isolated UserDefaults suite) ([#22](https://github.com/scottblydotcom/claude-context-meter/pull/22))
+
+### Internal
+- De-flaked the live-file `calculate()` equivalence tests by parsing a frozen snapshot instead of
+  comparing two independent scans of a live, actively-written `~/.claude`
+
 ## [1.3.0] - 2026-07-21
 
 ### Fixed
