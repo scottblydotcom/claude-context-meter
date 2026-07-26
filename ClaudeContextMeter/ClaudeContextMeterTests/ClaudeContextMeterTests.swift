@@ -602,6 +602,31 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(start.timeIntervalSince1970, expectedStart.timeIntervalSince1970, accuracy: 1.0)
     }
 
+    /// DST regression (claude-context-meter-nfc): for a realistic reset (Tue noon), both the
+    /// window start and the +7-day next reset must stay at noon WALL-CLOCK across the US
+    /// spring-forward (Sun Mar 8, 2026). Only exercises DST when run in a DST timezone
+    /// (e.g. America/Los_Angeles); the noon-preservation assertions hold in any zone.
+    func testWeeklyWindowPreservesWallClockAcrossSpringForward() {
+        let cal = Calendar.current
+        AppPreferences.store.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)  // Tuesday
+        AppPreferences.store.set(12, forKey: WeeklyUsageCalculator.hourKey)     // noon
+
+        func localTime(_ y: Int, _ m: Int, _ d: Int, _ h: Int) -> Date {
+            cal.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: 0, second: 0))!
+        }
+        let expectedStart = localTime(2026, 3, 3, 12)   // Tue Mar 3, noon (before DST)
+        let now           = localTime(2026, 3, 4, 9)    // Wed Mar 4, 9 AM
+
+        let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
+        XCTAssertEqual(start, expectedStart, "window start should be the most recent Tue noon")
+
+        // The 7-day next reset must land on noon again the following Tuesday (Mar 10), AFTER the
+        // Mar 8 spring-forward — wall-clock noon preserved, not shifted by the lost hour.
+        let nextReset = cal.date(byAdding: .day, value: 7, to: start)!
+        XCTAssertEqual(nextReset, localTime(2026, 3, 10, 12),
+                       "weekly reset should stay at noon wall-clock across DST")
+    }
+
     func testWeeklyWindowStartOnResetDayBeforeResetHour() {
         // Simulate: now = Tuesday at 8 PM, reset = Tuesday at 9 PM.
         // Expected: window started LAST Tuesday at 9 PM (not today).
