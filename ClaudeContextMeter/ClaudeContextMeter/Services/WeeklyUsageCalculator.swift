@@ -70,8 +70,7 @@ nonisolated enum WeeklyUsageCalculator {
         let windowStart = findWeeklyWindowStart(relativeTo: now)
         let nextReset   = Calendar.current.date(byAdding: .day, value: 7, to: windowStart)!
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let formatter = jsonlTimestampParser   // shared, pre-configured (claude-context-meter-f7i)
 
         var byRequest: [String: Tally] = [:]
 

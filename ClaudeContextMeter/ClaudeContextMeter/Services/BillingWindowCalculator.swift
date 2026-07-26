@@ -70,8 +70,7 @@ nonisolated enum BillingWindowCalculator {
     /// all three calculators via JSONLParseCache).
     static func calculate(records: [SessionRecord]) -> BillingWindowMetrics {
         let now = Date()
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let formatter = jsonlTimestampParser   // shared, pre-configured (claude-context-meter-f7i)
 
         let lookback = now.addingTimeInterval(-10 * 3600)
 

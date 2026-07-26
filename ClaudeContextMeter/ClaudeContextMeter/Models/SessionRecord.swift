@@ -7,6 +7,18 @@
 
 import Foundation
 
+/// Shared parser for Claude JSONL record timestamps (e.g. "2026-04-03T20:00:00.000Z").
+/// `ISO8601DateFormatter` is thread-safe on macOS 10.13+, so a single shared instance avoids
+/// reallocating (and reconfiguring) one on every calculator call — which runs on every refresh
+/// cycle across all three calculators (claude-context-meter-f7i). `nonisolated(unsafe)` because
+/// the type isn't `Sendable`, but the instance is only ever *read* (concurrent parsing is safe)
+/// and never reconfigured after this initializer.
+nonisolated(unsafe) let jsonlTimestampParser: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()
+
 /// Plain data types nonisolated because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION =
 /// MainActor`; without this, they'd implicitly inherit @MainActor and be unusable from
 /// RefreshCoordinator (an actor) and the nonisolated calculators that parse/compute over them.
