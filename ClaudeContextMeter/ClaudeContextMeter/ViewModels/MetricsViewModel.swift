@@ -6,6 +6,13 @@
 import SwiftUI
 import Combine
 
+extension Notification.Name {
+    /// Posted by SettingsView when the Settings window closes. SettingsView lives in a separate
+    /// Settings scene with no reference to the shared MetricsViewModel, so this decouples the
+    /// "user changed a setting, refresh the meter" signal across scenes.
+    static let settingsDidClose = Notification.Name("com.scottbly.ClaudeContextMeter.settingsDidClose")
+}
+
 @MainActor
 class MetricsViewModel: ObservableObject {
     @Published var context: ContextWindowMetrics?
@@ -76,6 +83,16 @@ class MetricsViewModel: ObservableObject {
                         self.refresh()
                     }
                 }
+            }
+            .store(in: &cancellables)
+
+        // Deterministic refresh when the Settings window closes. The didChange observer above
+        // is a best-effort live path, but it doesn't reliably fire for the @AppStorage picker
+        // writes in the separate Settings scene, so closing Settings always re-reads the meter.
+        NotificationCenter.default
+            .publisher(for: .settingsDidClose)
+            .sink { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
             }
             .store(in: &cancellables)
     }
