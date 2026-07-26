@@ -11,7 +11,13 @@ import Foundation
 /// deleted a live `selectedPlan`/`billingTokenLimit` because it wrote to the shared prod
 /// domain). `nonisolated(unsafe)` because it's a mutable global read from the nonisolated
 /// calculators (off the main thread) and swapped by tests; the value is only ever reassigned
-/// in test setUp/tearDown, never concurrently with reads in production.
+/// in test setUp/tearDown, never concurrently with reads in production (production never writes
+/// it — it stays `.standard`, so reads observe an effectively-immutable value).
+///
+/// The swap-in-setUp isolation assumes **serial** test execution (the scheme's TestableReference
+/// is not marked `parallelizable`). If parallel test execution is ever enabled, two test classes
+/// swapping this global would race — move to per-call store injection at that point rather than a
+/// shared global. (Surfaced by an outside-family fleet review, 2026-07-26.)
 nonisolated enum AppPreferences {
     nonisolated(unsafe) static var store: UserDefaults = .standard
 }
