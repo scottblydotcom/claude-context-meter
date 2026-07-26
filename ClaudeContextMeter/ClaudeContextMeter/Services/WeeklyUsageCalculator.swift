@@ -19,14 +19,14 @@ nonisolated enum WeeklyUsageCalculator {
     static let defaultHour    = 21
 
     static var resetWeekday: Int {
-        UserDefaults.standard.object(forKey: weekdayKey) != nil
-            ? UserDefaults.standard.integer(forKey: weekdayKey)
+        AppPreferences.store.object(forKey: weekdayKey) != nil
+            ? AppPreferences.store.integer(forKey: weekdayKey)
             : defaultWeekday
     }
 
     static var resetHour: Int {
-        UserDefaults.standard.object(forKey: hourKey) != nil
-            ? UserDefaults.standard.integer(forKey: hourKey)
+        AppPreferences.store.object(forKey: hourKey) != nil
+            ? AppPreferences.store.integer(forKey: hourKey)
             : defaultHour
     }
 

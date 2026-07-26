@@ -9,6 +9,12 @@ import ServiceManagement
 struct SettingsView: View {
     @AppStorage(ClaudePlan.planKey) private var selectedPlanRaw: String = ClaudePlan.pro.rawValue
     @AppStorage(BillingWindowCalculator.limitKey) private var tokenLimit: Int = Int(ClaudePlan.pro.tokenLimit)
+    // Weekly reset schedule. Anthropic's weekly-limit reset time isn't published in any
+    // clean on-box file (see claude-context-meter-va6 / the auto-derive follow-up), so it's
+    // user-set here to match what Claude's own usage settings show. WeeklyUsageCalculator
+    // reads these same keys; when unset it falls back to the same defaults used here.
+    @AppStorage(WeeklyUsageCalculator.weekdayKey) private var resetWeekday: Int = WeeklyUsageCalculator.defaultWeekday
+    @AppStorage(WeeklyUsageCalculator.hourKey) private var resetHour: Int = WeeklyUsageCalculator.defaultHour
     @State private var launchAtLogin: Bool = (SMAppService.mainApp.status == .enabled)
     @State private var tokenLimitText: String
     @FocusState private var tokenFieldFocused: Bool
@@ -51,6 +57,26 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Weekly Reset") {
+                Picker("Reset day", selection: $resetWeekday) {
+                    ForEach(1...7, id: \.self) { weekday in
+                        Text(Self.weekdayName(weekday)).tag(weekday)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Picker("Reset time", selection: $resetHour) {
+                    ForEach(0..<24, id: \.self) { hour in
+                        Text(Self.hourLabel(hour)).tag(hour)
+                    }
+                }
+                .pickerStyle(.menu)
+
+                Text("Set this to match the weekly reset shown in Claude's usage settings.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("General") {
                 Toggle("Launch at Login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, enabled in
@@ -82,7 +108,7 @@ struct SettingsView: View {
             // is needed (which would spuriously fire UserDefaults.didChangeNotification).
             tokenLimitText = tokenLimit > 0 ? "\(tokenLimit)" : "\(Int(ClaudePlan.pro.tokenLimit))"
         }
-        .frame(width: 360, height: 240)
+        .frame(width: 360, height: 360)
     }
 
     private func commitTokenLimit() {
@@ -94,6 +120,21 @@ struct SettingsView: View {
         }
         guard value != tokenLimit else { return }  // no-op on double-fire (e.g. Return key)
         tokenLimit = value
+    }
+
+    /// Display name for a Calendar weekday (1=Sunday … 7=Saturday), localized via the
+    /// calendar's own symbols so it matches the rest of the UI's day formatting.
+    static func weekdayName(_ weekday: Int) -> String {
+        let symbols = Calendar.current.weekdaySymbols          // index 0 = Sunday
+        return symbols[(weekday - 1) % symbols.count]
+    }
+
+    /// On-the-hour label for a 0–23 hour, e.g. 0 → "12:00 AM", 12 → "12:00 PM", 21 → "9:00 PM".
+    /// Matches WeeklyUsageMetrics.nextResetDisplay's "h:mm a" formatting.
+    static func hourLabel(_ hour: Int) -> String {
+        let period = hour < 12 ? "AM" : "PM"
+        let hour12 = hour % 12 == 0 ? 12 : hour % 12
+        return "\(hour12):00 \(period)"
     }
 
     /// SwiftUI's Settings window uses a stable frame-autosave name we can match on

@@ -10,6 +10,23 @@ import XCTest
 
 final class ClaudeContextMeterTests: XCTestCase {
 
+    // Isolate every test from the user's real preferences (claude-context-meter-8ax). Tests
+    // used to write/removeObject on the shared prod UserDefaults domain, which deleted live
+    // selectedPlan/billingTokenLimit values on any run. Route all app UserDefaults access
+    // (AppPreferences.store) through a per-test throwaway suite instead.
+    private var testSuiteName: String!
+    override func setUp() {
+        super.setUp()
+        testSuiteName = "com.scottbly.ClaudeContextMeter.tests.\(UUID().uuidString)"
+        AppPreferences.store = UserDefaults(suiteName: testSuiteName)!
+    }
+    override func tearDown() {
+        AppPreferences.store.removePersistentDomain(forName: testSuiteName)
+        AppPreferences.store = .standard
+        testSuiteName = nil
+        super.tearDown()
+    }
+
     // MARK: - SessionRecord decoding
 
     func testDecodesCompleteAssistantRecord() throws {
@@ -235,6 +252,45 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertTrue(ModelLimits.extendedContextModels.contains("claude-opus-5"))
         XCTAssertTrue(ModelLimits.extendedContextModels.contains("claude-opus-4-8"))
         XCTAssertFalse(ModelLimits.extendedContextModels.contains("claude-haiku-4-5"))
+    }
+
+    // MARK: - Weekly reset configuration (Settings)
+
+    /// Locks the Settings time labels (claude-context-meter-va6). Midnight/noon are the
+    /// error-prone cases; 21→"9:00 PM" is Scott's mismatch (Claude shows Tue 12:00 PM).
+    func testSettingsHourLabelFormatsOnTheHourAmPm() {
+        XCTAssertEqual(SettingsView.hourLabel(0),  "12:00 AM")
+        XCTAssertEqual(SettingsView.hourLabel(9),  "9:00 AM")
+        XCTAssertEqual(SettingsView.hourLabel(12), "12:00 PM")
+        XCTAssertEqual(SettingsView.hourLabel(21), "9:00 PM")
+        XCTAssertEqual(SettingsView.hourLabel(23), "11:00 PM")
+    }
+
+    /// Locks the 1=Sunday…7=Saturday Calendar-weekday mapping used by the reset-day picker,
+    /// so weekday 3 is Tuesday (the value that must correspond to Claude's "Tue" reset).
+    func testSettingsWeekdayNameMapsCalendarWeekday() {
+        let symbols = Calendar.current.weekdaySymbols
+        XCTAssertEqual(SettingsView.weekdayName(1), symbols[0])
+        XCTAssertEqual(SettingsView.weekdayName(3), symbols[2])
+        XCTAssertEqual(SettingsView.weekdayName(7), symbols[6])
+    }
+
+    /// The whole point of the feature: a user-set weekday/hour is honored by the calculator.
+    /// (Runs against the isolated test suite, so it doesn't touch real prefs.)
+    func testWeeklyCalculatorHonorsConfiguredWeekdayAndHour() {
+        AppPreferences.store.set(3, forKey: WeeklyUsageCalculator.weekdayKey)   // Tuesday
+        AppPreferences.store.set(12, forKey: WeeklyUsageCalculator.hourKey)     // noon
+        XCTAssertEqual(WeeklyUsageCalculator.resetWeekday, 3)
+        XCTAssertEqual(WeeklyUsageCalculator.resetHour, 12)
+    }
+
+    /// With nothing configured, the calculator falls back to the same defaults the Settings
+    /// pickers seed (Tue 21:00), so the shipped default and the UI agree.
+    func testWeeklyCalculatorDefaultsMatchSettingsDefaults() {
+        AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+        AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+        XCTAssertEqual(WeeklyUsageCalculator.resetWeekday, WeeklyUsageCalculator.defaultWeekday)
+        XCTAssertEqual(WeeklyUsageCalculator.resetHour, WeeklyUsageCalculator.defaultHour)
     }
 
     // MARK: - JSONLParser
@@ -516,11 +572,11 @@ final class ClaudeContextMeterTests: XCTestCase {
         let expectedStart = calendar.date(from: resetComps)!
 
         // Temporarily override UserDefaults to Tuesday 9 PM.
-        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
-        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        AppPreferences.store.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        AppPreferences.store.set(21, forKey: WeeklyUsageCalculator.hourKey)
         defer {
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.hourKey)
         }
 
         let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
@@ -543,11 +599,11 @@ final class ClaudeContextMeterTests: XCTestCase {
         resetComps.hour = 21; resetComps.minute = 0; resetComps.second = 0
         let expectedStart = calendar.date(from: resetComps)!
 
-        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
-        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        AppPreferences.store.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        AppPreferences.store.set(21, forKey: WeeklyUsageCalculator.hourKey)
         defer {
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.hourKey)
         }
 
         let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
@@ -570,11 +626,11 @@ final class ClaudeContextMeterTests: XCTestCase {
         resetComps.hour = 21; resetComps.minute = 0; resetComps.second = 0
         let expectedStart = calendar.date(from: resetComps)!
 
-        UserDefaults.standard.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
-        UserDefaults.standard.set(21, forKey: WeeklyUsageCalculator.hourKey)
+        AppPreferences.store.set(3,  forKey: WeeklyUsageCalculator.weekdayKey)
+        AppPreferences.store.set(21, forKey: WeeklyUsageCalculator.hourKey)
         defer {
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
-            UserDefaults.standard.removeObject(forKey: WeeklyUsageCalculator.hourKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.weekdayKey)
+            AppPreferences.store.removeObject(forKey: WeeklyUsageCalculator.hourKey)
         }
 
         let start = WeeklyUsageCalculator.findWeeklyWindowStart(relativeTo: now)
@@ -1012,10 +1068,26 @@ final class ClaudeContextMeterTests: XCTestCase {
 
 final class ClaudePlanTests: XCTestCase {
 
+    // Same prod-prefs isolation as ClaudeContextMeterTests (claude-context-meter-8ax): a
+    // throwaway suite per test so ClaudePlan.save()/.current never touch the real domain.
+    private var testSuiteName: String!
+    override func setUp() {
+        super.setUp()
+        testSuiteName = "com.scottbly.ClaudeContextMeter.tests.\(UUID().uuidString)"
+        AppPreferences.store = UserDefaults(suiteName: testSuiteName)!
+    }
     override func tearDown() {
+        AppPreferences.store.removePersistentDomain(forName: testSuiteName)
+        AppPreferences.store = .standard
+        testSuiteName = nil
         super.tearDown()
-        UserDefaults.standard.removeObject(forKey: ClaudePlan.planKey)
-        UserDefaults.standard.removeObject(forKey: BillingWindowCalculator.limitKey)
+    }
+
+    /// Enforces claude-context-meter-8ax: tests must run against the throwaway suite, never the
+    /// shared production domain. If this fails, a test run could delete the user's live prefs.
+    func testTestsRunAgainstIsolatedStoreNotStandard() {
+        XCTAssertNotEqual(AppPreferences.store, UserDefaults.standard,
+                          "AppPreferences.store must be a throwaway suite during tests")
     }
 
     func testProLabelAndLimit() {
@@ -1038,29 +1110,29 @@ final class ClaudePlanTests: XCTestCase {
     }
 
     func testCurrentDefaultsToProWhenNothingStored() {
-        UserDefaults.standard.removeObject(forKey: ClaudePlan.planKey)
+        AppPreferences.store.removeObject(forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .pro)
     }
 
     func testCurrentReadsStoredPlan() {
-        UserDefaults.standard.set("max5x", forKey: ClaudePlan.planKey)
+        AppPreferences.store.set("max5x", forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .max5x)
     }
 
     func testCurrentFallsBackToProForUnknownRaw() {
-        UserDefaults.standard.set("enterprise", forKey: ClaudePlan.planKey)
+        AppPreferences.store.set("enterprise", forKey: ClaudePlan.planKey)
         XCTAssertEqual(ClaudePlan.current, .pro)
     }
 
     func testSaveWritesBothKeys() {
         ClaudePlan.max5x.save()
-        XCTAssertEqual(UserDefaults.standard.string(forKey: ClaudePlan.planKey), "max5x")
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey), 655_000)
+        XCTAssertEqual(AppPreferences.store.string(forKey: ClaudePlan.planKey), "max5x")
+        XCTAssertEqual(AppPreferences.store.integer(forKey: BillingWindowCalculator.limitKey), 655_000)
     }
 
     func testSaveMax20xWritesCorrectLimit() {
         ClaudePlan.max20x.save()
-        XCTAssertEqual(UserDefaults.standard.string(forKey: ClaudePlan.planKey), "max20x")
-        XCTAssertEqual(UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey), 2_620_000)
+        XCTAssertEqual(AppPreferences.store.string(forKey: ClaudePlan.planKey), "max20x")
+        XCTAssertEqual(AppPreferences.store.integer(forKey: BillingWindowCalculator.limitKey), 2_620_000)
     }
 }

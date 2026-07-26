@@ -18,8 +18,10 @@ class MetricsViewModel: ObservableObject {
     private let coordinator = RefreshCoordinator()
     // Tracked on the @MainActor to avoid capturing mutable locals in an escaping closure,
     // which is a Swift 6 strict-concurrency violation.
-    private var lastPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
-    private var lastLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
+    private var lastPlan    = AppPreferences.store.string(forKey: ClaudePlan.planKey)
+    private var lastLimit   = AppPreferences.store.integer(forKey: BillingWindowCalculator.limitKey)
+    private var lastWeekday = AppPreferences.store.integer(forKey: WeeklyUsageCalculator.weekdayKey)
+    private var lastHour    = AppPreferences.store.integer(forKey: WeeklyUsageCalculator.hourKey)
 
     init() {
         refresh()
@@ -51,21 +53,26 @@ class MetricsViewModel: ObservableObject {
             DispatchQueue.main.async { self?.refresh() }
         }
 
-        // Refresh when the user changes plan or token limit in Settings.
-        // Filter to the two relevant keys to avoid spurious refreshes on every
-        // unrelated UserDefaults write (e.g. other @AppStorage properties).
-        // lastPlan/lastLimit are @MainActor properties — mutations are wrapped in
-        // Task { @MainActor in } to satisfy Swift 6 strict concurrency.
+        // Refresh when the user changes plan, token limit, or the weekly reset schedule in
+        // Settings. Filter to the relevant keys to avoid spurious refreshes on every unrelated
+        // UserDefaults write (e.g. other @AppStorage properties). The tracked lastX values are
+        // @MainActor properties — mutations are wrapped in Task { @MainActor in } to satisfy
+        // Swift 6 strict concurrency.
         NotificationCenter.default
             .publisher(for: UserDefaults.didChangeNotification)
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self = self else { return }
-                    let currentPlan  = UserDefaults.standard.string(forKey: ClaudePlan.planKey)
-                    let currentLimit = UserDefaults.standard.integer(forKey: BillingWindowCalculator.limitKey)
-                    if currentPlan != self.lastPlan || currentLimit != self.lastLimit {
-                        self.lastPlan  = currentPlan
-                        self.lastLimit = currentLimit
+                    let currentPlan    = AppPreferences.store.string(forKey: ClaudePlan.planKey)
+                    let currentLimit   = AppPreferences.store.integer(forKey: BillingWindowCalculator.limitKey)
+                    let currentWeekday = AppPreferences.store.integer(forKey: WeeklyUsageCalculator.weekdayKey)
+                    let currentHour    = AppPreferences.store.integer(forKey: WeeklyUsageCalculator.hourKey)
+                    if currentPlan != self.lastPlan || currentLimit != self.lastLimit
+                        || currentWeekday != self.lastWeekday || currentHour != self.lastHour {
+                        self.lastPlan    = currentPlan
+                        self.lastLimit   = currentLimit
+                        self.lastWeekday = currentWeekday
+                        self.lastHour    = currentHour
                         self.refresh()
                     }
                 }
