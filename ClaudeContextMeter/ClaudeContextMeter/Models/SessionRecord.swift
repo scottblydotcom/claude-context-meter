@@ -39,6 +39,15 @@ nonisolated struct UsageTokens: Codable, Sendable {
     var totalTokens: Int64 {
         inputTokens + (cacheCreationInputTokens ?? 0) + (cacheReadInputTokens ?? 0) + outputTokens
     }
+
+    /// The input-side token sum (input + cache_creation + cache_read), **excluding output**.
+    /// These are the tokens that occupy the model's *input* context window; a model physically
+    /// cannot accept more input than its window, so this is what must be compared against a
+    /// context-window limit. Comparing `totalTokens` (which adds generated output on top) would
+    /// let a maxed-out 200k model tip past 200k and be misclassified as a larger-window model.
+    var inputSideTokens: Int64 {
+        inputTokens + (cacheCreationInputTokens ?? 0) + (cacheReadInputTokens ?? 0)
+    }
 }
 
 /// One line of a Claude JSONL session log file.

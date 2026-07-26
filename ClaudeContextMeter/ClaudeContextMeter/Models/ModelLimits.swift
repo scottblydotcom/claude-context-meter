@@ -13,96 +13,64 @@ nonisolated enum ModelLimits {
     static let defaultContextWindow: Int64 = 200_000
     static let extendedContextWindow: Int64 = 1_000_000
 
-    /// Model IDs (as they appear in JSONL `message.model`) that can run with a 1M-token
-    /// context window. A model in this set still starts at `defaultContextWindow` — the
-    /// 1M option is a per-session opt-in Anthropic detects reactively (see
-    /// `contextWindow(for:sessionId:observedTokens:)`), not a fixed property of the model.
+    /// Each model's maximum context window — the model's **input** capacity (Anthropic's Models
+    /// API exposes it as `max_input_tokens`, a separate limit from `max_tokens` for output). The
+    /// model's *max capability* is fixed by the model string; the *effective* window a given
+    /// session is granted is not necessarily — on Claude Code the 1M window is auto-granted on
+    /// Max/Team/Enterprise but requires usage credits on Pro (see the Pro limitation below).
     ///
-    /// Source: platform.claude.com/docs/en/build-with-claude/context-windows, checked
-    /// 2026-07-14 — only Haiku 4.5 lacks a 1M option among current models. Verify against
-    /// current docs before editing; this list moves as fast as the model lineup does.
-    static let extendedContextModels: Set<String> = [
-        "claude-opus-4-6",
-        "claude-opus-4-7",
-        "claude-opus-4-8",
-        "claude-sonnet-4-6",
-        "claude-sonnet-5",
-        "claude-fable-5",
-        "claude-mythos-5"
+    /// Any model **not** listed falls back to `defaultContextWindow` (200k). The upward-only
+    /// safety net in `contextWindow(for:observedInputTokens:)` promotes an unlisted model to 1M
+    /// once its *input-side* usage exceeds 200k — but it does **nothing** below 200k, so an
+    /// unmapped 1M model used under 200k still shows the 200k denominator (the exact
+    /// 178k/200k-vs-/1M under-report this fix targets). Keep this map current; the net is not a
+    /// substitute for mapping a model.
+    ///
+    /// **Known limitation (Pro plan — tracked in claude-context-meter-n6y):** a Pro-without-
+    /// credits session is genuinely capped at 200k, yet this map returns 1M for a 1M-capable
+    /// model from the first record, over-stating the denominator (~5x under-report) for the
+    /// **entire** session. The safety net cannot self-correct this: base is already 1M and the
+    /// net only ever promotes *upward*. This is a deliberate deferral (plan-aware gating pending
+    /// empirical Pro validation) — documented so the comment matches reality, not a fix.
+    ///
+    /// Source: platform.claude.com model catalog, checked 2026-07-24. Verify against the live
+    /// catalog before editing.
+    static let contextWindowByModel: [String: Int64] = [
+        "claude-opus-5": extendedContextWindow,
+        "claude-opus-4-6": extendedContextWindow,
+        "claude-opus-4-7": extendedContextWindow,
+        "claude-opus-4-8": extendedContextWindow,
+        "claude-sonnet-4-6": extendedContextWindow,
+        "claude-sonnet-5": extendedContextWindow,
+        "claude-fable-5": extendedContextWindow,
+        "claude-mythos-5": extendedContextWindow,
+        "claude-haiku-4-5": defaultContextWindow
     ]
 
-    /// Single UserDefaults key storing all confirmed-1M sessions as [sessionId: confirmedDate].
-    /// One key replaces the previous per-session key pairs (sessionLimit_<id>, sessionLimitDate_<id>),
-    /// preventing namespace pollution and eliminating any need for dictionaryRepresentation().
-    static let opusSessionLimitsKey = "opusSessionLimits"
-
-    /// UserDefaults key tracking when we last ran the 30-day stale-entry prune.
-    static let lastPruneDateKey = "sessionLimitsLastPruneDate"
-
-    /// Serializes the opusSessionLimits read-modify-write below. `UserDefaults` operations
-    /// are individually thread-safe, but this type is `nonisolated` specifically so it can
-    /// be called from concurrent contexts (see type doc comment) — without this lock, two
-    /// concurrent callers could race and silently drop one session's confirmation.
-    private static let lock = NSLock()
-
-    /// Returns the context window limit for a session.
-    ///
-    /// A 1M-capable model's 200k and 1M variants report the same model string in JSONL.
-    /// Detection is reactive: once `observedTokens` exceeds 200k for a given session,
-    /// the confirmation date is stored in a single `[String: Date]` dictionary under
-    /// `opusSessionLimitsKey` in UserDefaults. This survives autocompaction resets
-    /// and is pruned (entries older than 30 days removed) at most once every 24 hours.
-    ///
-    /// **Boundary:** `observedTokens == 200_000` returns `defaultContextWindow` (200k).
-    /// The threshold is `> 200_000` — a session exactly at the 200k limit has not yet
-    /// exceeded it, so the 200k denominator is correct.
-    ///
-    /// **Empty/nil sessionId:** callers must guard against nil before calling; this
-    /// function guards against empty strings to prevent collisions on the "" key.
-    static func contextWindow(for model: String, sessionId: String, observedTokens: Int64) -> Int64 {
-        guard extendedContextModels.contains(model), !sessionId.isEmpty else { return defaultContextWindow }
-
-        return lock.withLock {
-            let defaults = UserDefaults.standard
-            pruneStaleEntriesIfNeeded(defaults: defaults)
-
-            var limits = defaults.dictionary(forKey: opusSessionLimitsKey) as? [String: Date] ?? [:]
-
-            // Already confirmed as 1M in a prior call — honour across compaction
-            if limits[sessionId] != nil {
-                return extendedContextWindow
-            }
-
-            // First time we observe tokens exceeding the 200k boundary
-            if observedTokens > defaultContextWindow {
-                limits[sessionId] = Date()
-                defaults.set(limits, forKey: opusSessionLimitsKey)
-                return extendedContextWindow
-            }
-
-            return defaultContextWindow
-        }
+    /// The set of models this build maps to the 1M window. Derived from `contextWindowByModel`
+    /// so it can't drift out of sync. Retained for tests and any caller that needs the list.
+    static var extendedContextModels: Set<String> {
+        Set(contextWindowByModel.filter { $0.value == extendedContextWindow }.map { $0.key })
     }
 
-    // MARK: - Private
-
-    /// Prunes sessions confirmed more than 30 days ago. Throttled to run at most once
-    /// per 24 hours — the operation is cheap (one dict read + filter + write) but
-    /// called on every FSEvent and 30s heartbeat for Opus 4.7 sessions.
-    private static func pruneStaleEntriesIfNeeded(defaults: UserDefaults) {
-        let now = Date()
-        if let lastPrune = defaults.object(forKey: lastPruneDateKey) as? Date,
-           now.timeIntervalSince(lastPrune) < 24 * 60 * 60 {
-            return
-        }
-        defaults.set(now, forKey: lastPruneDateKey)
-
-        var limits = defaults.dictionary(forKey: opusSessionLimitsKey) as? [String: Date] ?? [:]
-        let cutoff = now.addingTimeInterval(-30 * 24 * 60 * 60)
-        let originalCount = limits.count
-        limits = limits.filter { $0.value >= cutoff }
-        if limits.count != originalCount {
-            defaults.set(limits, forKey: opusSessionLimitsKey)
-        }
+    /// Returns the context-window denominator for a session, from the model ID.
+    ///
+    /// `observedInputTokens` MUST be the **input-side** sum (input + cache_creation + cache_read),
+    /// *excluding* output — see `UsageTokens.inputSideTokens`. The mapped window is the model's
+    /// max INPUT capacity, and a model physically cannot accept more input than its window, so a
+    /// genuine 200k model's input side is itself capped at 200k. (Passing `totalTokens`, which
+    /// adds generated output on top, would let a maxed-out 200k model tip past 200k and be
+    /// falsely promoted — that was a real bug, fixed by taking the input side here.)
+    ///
+    /// Safety net: if the input side exceeds the mapped window, the session must actually be
+    /// running a larger window (a model we mapped low, or one not in the map), so promote to
+    /// `extendedContextWindow`. Given today's **binary** 200k/1M lineup this only ever corrects
+    /// under-reporting. Caveat: a hypothetical future model with a *mid-tier* window (e.g. 400k)
+    /// that we failed to map would be over-promoted to 1M — revisit if the lineup stops being
+    /// binary.
+    static func contextWindow(for model: String, observedInputTokens: Int64) -> Int64 {
+        let base = contextWindowByModel[model] ?? defaultContextWindow
+        if observedInputTokens > base { return extendedContextWindow }
+        return base
     }
 }

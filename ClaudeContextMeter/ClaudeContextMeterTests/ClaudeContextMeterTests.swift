@@ -140,154 +140,101 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(usage.totalTokens, 1300)
     }
 
-    // MARK: - ModelLimits
+    // MARK: - ModelLimits (deterministic model → context window)
+    //
+    // `contextWindow(for:observedInputTokens:)` takes the INPUT-side token sum (input +
+    // cache_creation + cache_read), excluding output — see UsageTokens.inputSideTokens and the
+    // calculator-level test testHaikuAtInputCapWithOutputStays200k, which proves output can no
+    // longer falsely promote a maxed-out 200k model to /1M.
 
-    /// Registers teardown cleanup for a ModelLimits test sessionId so the entry is
-    /// always removed from the opusSessionLimits dict even if an assertion throws mid-test.
-    private func registerModelLimitsTeardown(sessionId: String) {
-        addTeardownBlock {
-            var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
-                as? [String: Date] ?? [:]
-            limits.removeValue(forKey: sessionId)
-            UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
-        }
+    /// The bug this fix targets: a 1M-capable model sitting *below* 200k tokens must still
+    /// report the 1M denominator. The old reactive design pinned it to 200k until it observed
+    /// >200k, so a real opus-4-8 session at 178k showed 178k/200k (89%) instead of /1M (18%).
+    func testExtendedModelUnder200kReturns1M() {
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-opus-4-8", observedInputTokens: 178_694),
+            1_000_000,
+            "A 1M model below 200k tokens must still use the 1M denominator"
+        )
     }
 
-    func testOpus47Under200kReturns200kLimit() {
-        registerModelLimitsTeardown(sessionId: "test-ml-under")
-        let result = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "test-ml-under",
-            observedTokens: 150_000
-        )
-        XCTAssertEqual(result, 200_000)
+    /// Opus 5 (released 2026-07-23, verified via platform.claude.com) is a 1M-capable model.
+    func testOpus5Returns1M() {
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-opus-5", observedInputTokens: 50_000),
+            1_000_000)
     }
 
-    func testOpus47AtExactly200kReturns200kLimit() {
-        // Exactly at the boundary returns 200k — the session hasn't exceeded the limit yet.
-        registerModelLimitsTeardown(sessionId: "test-ml-exact")
-        let result = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "test-ml-exact",
-            observedTokens: 200_000
-        )
-        XCTAssertEqual(result, 200_000)
+    /// Pins the FULL expected map by literal value, so a silent drop or mis-map of any single
+    /// model is caught (the derived-Set tests below only prove internal agreement, not that the
+    /// map itself is correct/complete). Update deliberately when the shipped lineup changes.
+    func testContextWindowMapMatchesExpectedLineup() {
+        let expected: [String: Int64] = [
+            "claude-opus-5": 1_000_000,
+            "claude-opus-4-6": 1_000_000,
+            "claude-opus-4-7": 1_000_000,
+            "claude-opus-4-8": 1_000_000,
+            "claude-sonnet-4-6": 1_000_000,
+            "claude-sonnet-5": 1_000_000,
+            "claude-fable-5": 1_000_000,
+            "claude-mythos-5": 1_000_000,
+            "claude-haiku-4-5": 200_000
+        ]
+        XCTAssertEqual(ModelLimits.contextWindowByModel, expected,
+                       "Shipped model→window map drifted from the expected lineup")
     }
 
-    func testOpus47Over200kReturns1MAndPersistsInUserDefaults() {
-        registerModelLimitsTeardown(sessionId: "test-ml-over")
-        let result = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "test-ml-over",
-            observedTokens: 250_000
-        )
-        XCTAssertEqual(result, 1_000_000)
-        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
-        XCTAssertNotNil(limits?["test-ml-over"], "Session should be recorded in opusSessionLimits dict")
-    }
-
-    func testOpus47PostCompactionRetains1MLimitAfterTokensDrop() {
-        registerModelLimitsTeardown(sessionId: "test-ml-compact")
-        // First call: 250k tokens — establishes 1M limit in UserDefaults
-        _ = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "test-ml-compact",
-            observedTokens: 250_000
-        )
-        // Second call: 40k tokens (post-compaction) — must still return 1M from persisted value
-        let postCompaction = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "test-ml-compact",
-            observedTokens: 40_000
-        )
-        XCTAssertEqual(postCompaction, 1_000_000)
-    }
-
-    func testUnknownModelReturns200k() {
-        registerModelLimitsTeardown(sessionId: "test-ml-unknown")
-        let result = ModelLimits.contextWindow(
-            for: "claude-future-model-xyz",
-            sessionId: "test-ml-unknown",
-            observedTokens: 0
-        )
-        XCTAssertEqual(result, 200_000)
-    }
-
-    func testEmptySessionIdReturns200kAndWritesNoUserDefaultsKeys() {
-        // An empty sessionId from malformed JSONL must not write to UserDefaults —
-        // doing so would create a shared collision key across all empty-sessionId sessions.
-        let result = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: "",
-            observedTokens: 999_999
-        )
-        XCTAssertEqual(result, 200_000)
-        let limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey) as? [String: Date]
-        XCTAssertNil(limits?[""], "Empty sessionId must not be written to opusSessionLimits dict")
-    }
-
-    func testStaleSessionLimitKeyIsPrunedAfter30Days() {
-        // Seed a stale entry (31 days old) and verify pruneStaleEntries removes it
-        // when contextWindow() is next called for any Opus 4.7 session.
-        let staleSessionId = "test-ml-stale"
-        let triggerSessionId = "test-ml-prune-trigger"
-        registerModelLimitsTeardown(sessionId: staleSessionId)
-        registerModelLimitsTeardown(sessionId: triggerSessionId)
-        // Clear the 24h throttle key so pruning fires unconditionally in this test.
-        UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
-        addTeardownBlock {
-            UserDefaults.standard.removeObject(forKey: ModelLimits.lastPruneDateKey)
-        }
-
-        let staleDate = Date().addingTimeInterval(-31 * 24 * 60 * 60)
-        var limits = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
-            as? [String: Date] ?? [:]
-        limits[staleSessionId] = staleDate
-        UserDefaults.standard.set(limits, forKey: ModelLimits.opusSessionLimitsKey)
-
-        // Trigger pruning via any contextWindow() call on Opus 4.7
-        _ = ModelLimits.contextWindow(
-            for: "claude-opus-4-7",
-            sessionId: triggerSessionId,
-            observedTokens: 0
-        )
-
-        let remaining = UserDefaults.standard.dictionary(forKey: ModelLimits.opusSessionLimitsKey)
-            as? [String: Date]
-        XCTAssertNil(remaining?[staleSessionId], "Stale entry should have been pruned from opusSessionLimits")
-    }
-
-    // MARK: - ModelLimits — current 1M-capable lineup (data-driven lookup)
-
-    /// Every model Anthropic currently ships with a 1M-token context option, per
-    /// platform.claude.com/docs/en/build-with-claude/context-windows (checked 2026-07-14).
-    /// Opus 4.7 is already covered by the tests above — this covers the rest of the lineup
-    /// so a future model addition/removal is caught by a parameterized-style sweep instead
-    /// of requiring a new hand-written test per model. Reads `ModelLimits.extendedContextModels`
-    /// directly rather than duplicating the list, so this test can't silently drift out of
-    /// sync with production data (it previously omitted claude-opus-4-7 for this reason).
-    func testAllCurrentExtendedContextModelsReturn1MWhenOver200k() {
+    /// Every current 1M-capable model returns 1M regardless of observed input. Reads the
+    /// production map so the test can't drift out of sync with the shipped lineup.
+    func testAllExtendedContextModelsReturn1MAtAnyTokenCount() {
         for model in ModelLimits.extendedContextModels {
-            let sessionId = "test-ml-extended-\(model)"
-            registerModelLimitsTeardown(sessionId: sessionId)
-            let result = ModelLimits.contextWindow(
-                for: model,
-                sessionId: sessionId,
-                observedTokens: 250_000
-            )
-            XCTAssertEqual(result, 1_000_000, "\(model) should be recognized as 1M-capable")
+            XCTAssertEqual(
+                ModelLimits.contextWindow(for: model, observedInputTokens: 10_000),
+                1_000_000, "\(model) should report 1M even at low input counts")
+            XCTAssertEqual(
+                ModelLimits.contextWindow(for: model, observedInputTokens: 900_000),
+                1_000_000, "\(model) should report 1M at high input counts")
         }
     }
 
-    func testHaiku45Over200kStillReturns200k() {
-        // Per current Anthropic docs, Haiku 4.5 is the only current model still capped at 200k.
-        registerModelLimitsTeardown(sessionId: "test-ml-haiku")
-        let result = ModelLimits.contextWindow(
-            for: "claude-haiku-4-5",
-            sessionId: "test-ml-haiku",
-            observedTokens: 999_999
-        )
-        XCTAssertEqual(result, 200_000)
+    func testHaiku45StaysAt200kUpToItsInputCap() {
+        // Haiku 4.5 is the only current 200k model. Because the input side is what a model can
+        // physically hold and it's capped at the 200k window, a real Haiku session's input side
+        // never exceeds 200k — so the safety net correctly never promotes it. (Output tokens,
+        // which used to be included and could tip a maxed session past 200k, are excluded now;
+        // see testHaikuAtInputCapWithOutputStays200k for the end-to-end proof.)
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-haiku-4-5", observedInputTokens: 150_000),
+            200_000)
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-haiku-4-5", observedInputTokens: 200_000),
+            200_000)
+    }
+
+    func testUnknownModelDefaultsTo200k() {
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-future-model-xyz", observedInputTokens: 0),
+            200_000)
+    }
+
+    /// Upward-only safety net: a model not in the map (or mapped low) whose *input side* exceeds
+    /// 200k must actually be running a larger window, so promote it to 1M. Includes the exact
+    /// `>` boundary (200_001) to lock the comparison operator.
+    func testUnmappedModelInputOver200kPromotesTo1M() {
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-future-model-xyz", observedInputTokens: 200_001),
+            1_000_000, "just over 200k input must promote (locks the `>` boundary)")
+        XCTAssertEqual(
+            ModelLimits.contextWindow(for: "claude-future-model-xyz", observedInputTokens: 250_000),
+            1_000_000)
+    }
+
+    /// `extendedContextModels` is derived from `contextWindowByModel`, so it can't silently
+    /// drift from the shipped data. Opus 5 in; Haiku (the one 200k current model) out.
+    func testExtendedContextModelsDerivedFromMap() {
+        XCTAssertTrue(ModelLimits.extendedContextModels.contains("claude-opus-5"))
+        XCTAssertTrue(ModelLimits.extendedContextModels.contains("claude-opus-4-8"))
+        XCTAssertFalse(ModelLimits.extendedContextModels.contains("claude-haiku-4-5"))
     }
 
     // MARK: - JSONLParser
@@ -759,6 +706,33 @@ final class ClaudeContextMeterTests: XCTestCase {
 
     func testContextCalculateRecordsNilFileReturnsNil() {
         XCTAssertNil(ContextWindowCalculator.calculate(mostRecentFile: nil, records: []))
+    }
+
+    /// Regression for the output-token over-report: a genuine 200k model (Haiku 4.5) whose
+    /// INPUT side sits at the 200k cap and then generates a large output must keep the 200k
+    /// denominator — not be falsely promoted to /1M. Before the fix the safety net compared
+    /// totalTokens (input + output = 260k > 200k) and wrongly returned 1M, under-stating usage
+    /// ~5x at the exact moment the user is maxed out.
+    func testHaikuAtInputCapWithOutputStays200k() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("context_haiku_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let file = tempDir.appendingPathComponent("session.jsonl")
+        // input-side = 200_000 (at the cap); output = 60_000 on top → totalTokens = 260_000.
+        let line = """
+        {"type":"assistant","requestId":"req_1","sessionId":"s1","timestamp":"2026-07-25T10:00:00.000Z","message":{"model":"claude-haiku-4-5","stop_reason":"end_turn","usage":{"input_tokens":150000,"cache_creation_input_tokens":10000,"cache_read_input_tokens":40000,"output_tokens":60000}}}
+        """
+        try line.write(to: file, atomically: true, encoding: .utf8)
+
+        let records = try JSONLParser.parse(fileURL: file)
+        let metrics = ContextWindowCalculator.calculate(mostRecentFile: file, records: records)
+
+        XCTAssertEqual(metrics?.contextLimit, 200_000,
+                       "Output tokens must not promote a maxed-out 200k model to /1M")
+        XCTAssertEqual(metrics?.totalTokens, 260_000,
+                       "Numerator still counts total tokens incl. output (denominator is the fix)")
     }
 
     // MARK: - JSONLParser.scanAllFiles
