@@ -520,15 +520,34 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(result.outputTokens, 0)
     }
 
-    func testBillingCalculateFilesMatchesCalculateNoArg() {
-        let now = Date()
-        let lookback = now.addingTimeInterval(-10 * 3600)
-        let fileModifiedSince = lookback.addingTimeInterval(-1 * 3600)
-        let files = JSONLParser.allSessionFiles(modifiedSince: fileModifiedSince)
-        let fromFiles = BillingWindowCalculator.calculate(files: files)
-        let fromNoArg = BillingWindowCalculator.calculate()
-        XCTAssertEqual(fromFiles.outputTokens, fromNoArg.outputTokens)
-        XCTAssertEqual(fromFiles.tokenLimit,   fromNoArg.tokenLimit)
+    /// Copies live session files into an isolated temp dir (unique basenames) and returns the
+    /// frozen copies. Parsing a snapshot — not the live originals — is what makes the calculate()
+    /// idempotency tests deterministic: the running Claude session appends JSONL to the live
+    /// files between two reads, which flaked the old live-vs-live comparisons (aw7).
+    private func snapshotSessionFiles(_ files: [URL]) -> [URL] {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("snap_\(ProcessInfo.processInfo.globallyUniqueString)")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        var copies: [URL] = []
+        for (i, f) in files.enumerated() {
+            let dest = dir.appendingPathComponent("\(i)_\(f.lastPathComponent)")
+            if (try? FileManager.default.copyItem(at: f, to: dest)) != nil { copies.append(dest) }
+        }
+        return copies
+    }
+
+    /// calculate(files:) must be deterministic for a fixed set of file CONTENTS. (Previously
+    /// compared against no-arg calculate(), which re-scans ~/.claude; even capturing the file
+    /// list isn't enough because the active session appends to the files between reads — so we
+    /// parse a frozen snapshot. See aw7 / the live-file idempotency note.)
+    func testBillingCalculateFilesIsIdempotent() {
+        let live = JSONLParser.allSessionFiles(modifiedSince: Date().addingTimeInterval(-11 * 3600))
+        let files = snapshotSessionFiles(live)
+        let a = BillingWindowCalculator.calculate(files: files)
+        let b = BillingWindowCalculator.calculate(files: files)
+        XCTAssertEqual(a.outputTokens, b.outputTokens)
+        XCTAssertEqual(a.tokenLimit,   b.tokenLimit)
     }
 
     func testBillingCalculateRecordsMatchesCalculateFiles() throws {
@@ -687,14 +706,16 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertEqual(result.inputOutputOnly, 0)
     }
 
-    func testWeeklyCalculateFilesMatchesCalculateNoArg() {
-        let windowStart = WeeklyUsageCalculator.findWeeklyWindowStart()
-        let files = JSONLParser.allSessionFiles(modifiedSince: windowStart)
-        let fromFiles = WeeklyUsageCalculator.calculate(files: files)
-        let fromNoArg = WeeklyUsageCalculator.calculate()
-        XCTAssertEqual(fromFiles.allTokens,       fromNoArg.allTokens)
-        XCTAssertEqual(fromFiles.noCacheRead,     fromNoArg.noCacheRead)
-        XCTAssertEqual(fromFiles.inputOutputOnly, fromNoArg.inputOutputOnly)
+    /// calculate(files:) must be deterministic for a fixed set of file contents. Parses a frozen
+    /// snapshot of the live files (see testBillingCalculateFilesIsIdempotent / aw7).
+    func testWeeklyCalculateFilesIsIdempotent() {
+        let live = JSONLParser.allSessionFiles(modifiedSince: WeeklyUsageCalculator.findWeeklyWindowStart())
+        let files = snapshotSessionFiles(live)
+        let a = WeeklyUsageCalculator.calculate(files: files)
+        let b = WeeklyUsageCalculator.calculate(files: files)
+        XCTAssertEqual(a.allTokens,       b.allTokens)
+        XCTAssertEqual(a.noCacheRead,     b.noCacheRead)
+        XCTAssertEqual(a.inputOutputOnly, b.inputOutputOnly)
     }
 
     func testWeeklyCalculateRecordsMatchesCalculateFiles() throws {
