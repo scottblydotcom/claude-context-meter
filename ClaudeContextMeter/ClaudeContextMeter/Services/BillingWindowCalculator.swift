@@ -20,7 +20,7 @@ nonisolated enum BillingWindowCalculator {
 
     /// The current billing token limit, falls back to default.
     static var tokenLimit: Int64 {
-        let stored = UserDefaults.standard.integer(forKey: limitKey)
+        let stored = AppPreferences.store.integer(forKey: limitKey)
         return stored > 0 ? Int64(stored) : defaultLimit
     }
 

@@ -5,6 +5,17 @@
 
 import Foundation
 
+/// Single injection seam for all of the app's `UserDefaults` access. Production uses
+/// `.standard`; the unit tests point this at a throwaway suite so they never read or clobber
+/// the user's real preferences (see claude-context-meter-8ax — the test suite previously
+/// deleted a live `selectedPlan`/`billingTokenLimit` because it wrote to the shared prod
+/// domain). `nonisolated(unsafe)` because it's a mutable global read from the nonisolated
+/// calculators (off the main thread) and swapped by tests; the value is only ever reassigned
+/// in test setUp/tearDown, never concurrently with reads in production.
+nonisolated enum AppPreferences {
+    nonisolated(unsafe) static var store: UserDefaults = .standard
+}
+
 /// Marked `nonisolated` because this project sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`;
 /// without this, BillingWindowCalculator.defaultLimit (nonisolated) couldn't reference
 /// `ClaudePlan.pro.tokenLimit` at compile time. nonisolated is still freely callable from
@@ -32,7 +43,7 @@ nonisolated enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     var tokenLimit: Int64 { spec.tokenLimit }
 
     static var current: ClaudePlan {
-        guard let raw = UserDefaults.standard.string(forKey: ClaudePlan.planKey),
+        guard let raw = AppPreferences.store.string(forKey: ClaudePlan.planKey),
               let plan = ClaudePlan(rawValue: raw) else {
             return .pro
         }
@@ -43,7 +54,7 @@ nonisolated enum ClaudePlan: String, CaseIterable, Identifiable, Equatable {
     /// Not called by SettingsView (which drives both keys via @AppStorage directly);
     /// available for programmatic use and covered by unit tests.
     func save() {
-        UserDefaults.standard.set(rawValue, forKey: ClaudePlan.planKey)
-        UserDefaults.standard.set(Int(clamping: tokenLimit), forKey: BillingWindowCalculator.limitKey)
+        AppPreferences.store.set(rawValue, forKey: ClaudePlan.planKey)
+        AppPreferences.store.set(Int(clamping: tokenLimit), forKey: BillingWindowCalculator.limitKey)
     }
 }
