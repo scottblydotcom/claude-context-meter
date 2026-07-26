@@ -7,12 +7,16 @@
 
 import Foundation
 
-/// Shared parser for Claude JSONL record timestamps (e.g. "2026-04-03T20:00:00.000Z").
-/// `ISO8601DateFormatter` is thread-safe on macOS 10.13+, so a single shared instance avoids
-/// reallocating (and reconfiguring) one on every calculator call — which runs on every refresh
-/// cycle across all three calculators (claude-context-meter-f7i). `nonisolated(unsafe)` because
-/// the type isn't `Sendable`, but the instance is only ever *read* (concurrent parsing is safe)
-/// and never reconfigured after this initializer.
+/// Shared parser for Claude JSONL record timestamps (e.g. "2026-04-03T20:00:00.000Z"), so we don't
+/// reallocate and reconfigure an ISO8601DateFormatter on every calculator call — which runs on
+/// every refresh cycle across all three calculators (claude-context-meter-f7i).
+///
+/// `nonisolated(unsafe)` because the type isn't `Sendable`. This is safe by **confinement**, not by
+/// assuming ISO8601DateFormatter is itself concurrency-safe: every production use flows through the
+/// serialized `RefreshCoordinator` actor, which invokes the calculators sequentially (see
+/// RefreshCoordinator.refresh), so this instance is never accessed concurrently, and it is read-only
+/// after this initializer. If the calculators are ever parallelized (async let / TaskGroup), give
+/// each its own formatter or isolate this one — do not rely on ISO8601DateFormatter being thread-safe.
 nonisolated(unsafe) let jsonlTimestampParser: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
