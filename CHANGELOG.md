@@ -57,7 +57,32 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [1.2.0] - 2026-05-27
 
-Tagged in git but not previously published as a GitHub Release.
+Tagged in git on 2026-05-27 but not published as a GitHub Release until 2026-07-27; the notes below
+were reconstructed from the `v1.1.0..v1.2.0` commit range at that time. No binary is attached to the
+backfilled release.
+
+### Added
+- **Opus 4.7 1M-context detection.** Both Opus 4.7 variants write the same `claude-opus-4-7` string
+  to the session JSONL, so the 1M window can't be identified from the model name alone. Detection is
+  reactive: once a session's observed tokens exceed 200k, the 1M limit is recorded in the
+  `opusSessionLimits` UserDefaults dictionary keyed by session ID, so the denominator survives
+  autocompaction. Entries are pruned after 30 days, throttled to once per 24h
+  ([#3](https://github.com/scottblydotcom/claude-context-meter/pull/3))
+
+### Changed
+- Removed the cost-weighted and peak-adjusted weekly metrics — Anthropic eliminated peak pricing on
+  2026-05-06, so both were measuring something that no longer exists
+- README repositioned for Claude Code CLI users, documenting what the app can and cannot show
+  relative to Anthropic's own native usage meter
+
+### Performance
+- JSONL files older than the start of the weekly window are skipped during the scan instead of being
+  read and discarded
+
+### Internal
+- Session-limit storage consolidated into a single UserDefaults dictionary key rather than one key
+  per session, avoiding namespace pollution and a `dictionaryRepresentation()` scan
+- Guard against an empty session ID, which would otherwise collide in the limits dictionary
 
 ## [1.1.0]
 
