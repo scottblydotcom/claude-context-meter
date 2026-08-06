@@ -932,6 +932,33 @@ final class ClaudeContextMeterTests: XCTestCase {
         XCTAssertNotNil(second, "Call after minimumInterval should not be debounced")
     }
 
+    /// Regression (claude-context-meter-dxw, shipped in v1.4.0): closing the Settings window has
+    /// to update the meter even when a file-watcher or heartbeat refresh landed moments earlier.
+    /// The settings paths call `refresh(force: true)`; without a bypass the user's plan / token
+    /// limit / weekly-reset change is silently dropped until the next 60s heartbeat.
+    func testCoordinatorForcedRefreshBypassesDebounce() async {
+        let coordinator = RefreshCoordinator(minimumInterval: 3600)
+        let first = await coordinator.refresh()
+        XCTAssertNotNil(first, "First call should never be debounced")
+
+        let debounced = await coordinator.refresh()
+        XCTAssertNil(debounced, "Sanity check: an unforced call inside minimumInterval is debounced")
+
+        let forced = await coordinator.refresh(force: true)
+        XCTAssertNotNil(forced, "A forced refresh must bypass the debounce window")
+    }
+
+    /// The force flag must not disable debouncing for everything that follows it — the FSEvents
+    /// and heartbeat paths still need the throttle that Energy Phase 1/2 added, so a forced
+    /// refresh has to arm the window like any other refresh.
+    func testCoordinatorForcedRefreshStillArmsDebounceWindow() async {
+        let coordinator = RefreshCoordinator(minimumInterval: 3600)
+        _ = await coordinator.refresh(force: true)
+
+        let next = await coordinator.refresh()
+        XCTAssertNil(next, "A forced refresh must still debounce subsequent unforced calls")
+    }
+
     func testCoordinatorDoesNotReparseUnchangedFileAcrossRefreshes() async throws {
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("coord_cache_\(ProcessInfo.processInfo.globallyUniqueString)")

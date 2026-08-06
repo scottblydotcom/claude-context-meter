@@ -35,9 +35,13 @@ class MetricsViewModel: ObservableObject {
         startWatching()
     }
 
-    func refresh() {
+    /// - Parameter force: Pass `true` only for user-initiated settings changes. The automatic
+    ///   paths (FSEvents, heartbeat) must stay debounced, but a settings change that lands inside
+    ///   the debounce window would otherwise be dropped and never retried, leaving the meter on
+    ///   the old plan or limit until the next heartbeat (claude-context-meter-dxw).
+    func refresh(force: Bool = false) {
         Task {
-            guard let result = await coordinator.refresh() else { return }
+            guard let result = await coordinator.refresh(force: force) else { return }
             self.context = result.context
             self.billing = result.billing
             self.weekly  = result.weekly
@@ -80,7 +84,10 @@ class MetricsViewModel: ObservableObject {
                         self.lastLimit   = currentLimit
                         self.lastWeekday = currentWeekday
                         self.lastHour    = currentHour
-                        self.refresh()
+                        // Forced: the lastX values above are already updated, so this observer
+                        // will not fire again for the same change. A debounced refresh here is
+                        // lost permanently, not merely delayed.
+                        self.refresh(force: true)
                     }
                 }
             }
@@ -89,10 +96,11 @@ class MetricsViewModel: ObservableObject {
         // Deterministic refresh when the Settings window closes. The didChange observer above
         // is a best-effort live path, but it doesn't reliably fire for the @AppStorage picker
         // writes in the separate Settings scene, so closing Settings always re-reads the meter.
+        // Forced: this notification fires once, so a debounced refresh here is dropped for good.
         NotificationCenter.default
             .publisher(for: .settingsDidClose)
             .sink { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
+                Task { @MainActor in self?.refresh(force: true) }
             }
             .store(in: &cancellables)
     }
