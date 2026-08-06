@@ -51,7 +51,9 @@ This app reads files from `~/.claude/` via Foundation APIs (String, FileManager)
 
 - No App Sandbox (required to read `~/.claude/projects/` — sandboxed apps cannot access arbitrary home directory paths)
 - No network calls, no API keys, no remote data
-- Reads JSONL files via FSEvents + 30s heartbeat timer fallback
+- Reads JSONL files via FSEvents + 60s heartbeat timer fallback. Was 30s; raised to 60s in Energy
+  Phase 2 (PR #8) because FSEvents handles live updates and the heartbeat is only a backstop for
+  missed events. Do not "restore" 30s — it regresses the energy work.
 - Deduplicates by `requestId`; sums output_tokens from all complete assistant records
 - Bundle ID: `com.scottbly.ClaudeContextMeter`
 
