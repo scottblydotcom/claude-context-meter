@@ -14,7 +14,8 @@ struct RefreshResult {
 /// Off-main-thread coordinator: performs one directory scan per refresh cycle, resolves
 /// each relevant file's records through a JSONLParseCache (so unchanged files are never
 /// re-read or re-decoded), and passes derived records to the three metric calculators.
-/// Returns nil when called within `minimumInterval` of the previous refresh (debounced).
+/// Returns nil when called within `minimumInterval` of the previous refresh (debounced), unless
+/// the caller passes `force: true` — see `refresh(force:)`.
 actor RefreshCoordinator {
 
     private var lastRefreshDate: Date = .distantPast
@@ -27,9 +28,14 @@ actor RefreshCoordinator {
         self.projectsDir = projectsDir
     }
 
-    func refresh() async -> RefreshResult? {
+    /// - Parameter force: Skips the debounce window. Use only for user-initiated refreshes that
+    ///   must be reflected immediately — closing the Settings window, where dropping the refresh
+    ///   leaves the meter showing the pre-change plan or limit. The automatic paths (FSEvents,
+    ///   heartbeat) must stay debounced; that throttle is what the Energy Phase 1/2 work bought.
+    ///   A forced refresh still arms the window for subsequent unforced calls.
+    func refresh(force: Bool = false) async -> RefreshResult? {
         let now = Date()
-        guard now.timeIntervalSince(lastRefreshDate) >= minimumInterval else {
+        guard force || now.timeIntervalSince(lastRefreshDate) >= minimumInterval else {
             return nil
         }
         lastRefreshDate = now

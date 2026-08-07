@@ -3,6 +3,16 @@
 All notable changes to Claude Context Meter are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- Settings changes now always reach the meter. The v1.4.0 refresh-on-Settings-close path ran through
+  the 5-second debounce shared with FSEvents and the heartbeat, so closing Settings within 5s of an
+  automatic refresh silently dropped the update and the meter kept showing the old plan, token
+  limit, or weekly reset until the next 60s heartbeat. Both settings paths now force a refresh;
+  FSEvents and the heartbeat stay debounced, so the Energy Phase 1/2 throttle is unchanged. This
+  makes good on the v1.4.0 note below, which claimed the change took effect "immediately"
+
 ## [1.4.0] - 2026-07-26
 
 ### Added
