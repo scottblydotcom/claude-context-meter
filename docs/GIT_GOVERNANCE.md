@@ -1,5 +1,23 @@
 # Git Governance Runbook
 
+## Branch Model
+
+`main` → `dev` → `feature/*`. All new work targets **`dev`**; `dev` opens a release PR into `main`.
+PRs are required at every merge — no local merges.
+
+This was undocumented until 2026-08-07 and drifted silently as a result: PRs #21, #22, #23, #24 and
+#25 all went straight to `main`. Two supports keep the model real rather than aspirational:
+
+- **`dev` is a protected branch** (deletion and force-push blocked, no required checks so it stays
+  cheap to fast-forward). Protection exists specifically because `delete_branch_on_merge: true`
+  deletes `dev` on every `dev`→`main` release merge — that is what removed it after PR #23, and a
+  stale remote-tracking ref then made it look like ordinary drift rather than a deleted branch. If
+  `dev` ever does go missing, recreate it with `git push origin origin/main:refs/heads/dev` and
+  `git fetch --prune`.
+- **`.coderabbit.yaml` lists `dev` under `reviews.auto_review.base_branches`.** CodeRabbit only
+  auto-reviews the default branch otherwise, so every feature PR was being skipped. PR #24 merged
+  with no review at all for this reason.
+
 ## Controls in Force
 
 ### Branch Protection (main)

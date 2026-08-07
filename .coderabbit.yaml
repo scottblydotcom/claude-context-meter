@@ -1,0 +1,15 @@
+# CodeRabbit configuration.
+#
+# Why this file exists: CodeRabbit only auto-reviews PRs targeting the repository's DEFAULT branch
+# unless additional base branches are listed below (`base_branches` defaults to an empty list). This
+# project's workflow is main -> dev -> feature/*, so every feature PR targets `dev` — which meant
+# they were silently skipped. PR #24 merged with no review at all for exactly this reason; the only
+# signal was a collapsed "Review skipped" note in the PR thread.
+#
+# `base_branches` accepts regex. The default branch (main) is always reviewed and does not need to
+# be listed.
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - dev
