@@ -3,7 +3,7 @@
 All notable changes to Claude Context Meter are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.4.1] - 2026-08-08
 
 ### Fixed
 - Settings changes now always reach the meter. The v1.4.0 refresh-on-Settings-close path ran through
@@ -12,6 +12,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   limit, or weekly reset until the next 60s heartbeat. Both settings paths now force a refresh;
   FSEvents and the heartbeat stay debounced, so the Energy Phase 1/2 throttle is unchanged. This
   makes good on the v1.4.0 note below, which claimed the change took effect "immediately"
+  ([#25](https://github.com/scottblydotcom/claude-context-meter/pull/25))
+
+### Internal
+- Release history completed: v1.2.0 was git-tagged in May but never published as a GitHub Release,
+  and is now backfilled. Added `docs/DISTRIBUTION.md` recording the distribution channels, why
+  Homebrew is blocked on notarization rather than popularity, and why the repo's GitHub "Packages"
+  panel is correctly empty ([#24](https://github.com/scottblydotcom/claude-context-meter/pull/24))
+- CodeRabbit now reviews PRs targeting `dev`; it previously only auto-reviewed the default branch,
+  so every feature PR under the `main → dev → feature/*` model was silently skipped. The branch
+  model itself is now documented in `docs/GIT_GOVERNANCE.md`
+  ([#26](https://github.com/scottblydotcom/claude-context-meter/pull/26))
 
 ## [1.4.0] - 2026-07-26
 
