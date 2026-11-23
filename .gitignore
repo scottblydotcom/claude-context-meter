@@ -22,3 +22,6 @@ session-notes/
 *.db
 .beads-credential-key
 .env
+
+# beads activity log: local only (it holds tracker close reasons, and this repo is public)
+.beads/interactions.jsonl
